@@ -1,8 +1,9 @@
 import { supabase } from "./supabase";
 
-const API_BASE =
+const API_BASE = (
   process.env.NEXT_PUBLIC_RELAY_API_BASE ||
-  "http://127.0.0.1:8811";
+  "http://127.0.0.1:8811"
+).replace(/\/+$/, "");
 
 function qs(params) {
   return new URLSearchParams(params).toString();

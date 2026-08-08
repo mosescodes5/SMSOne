@@ -2,10 +2,12 @@
 
 import { Suspense, useEffect, useState, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 import DigitReel from "@/components/DigitReel";
-import { Button, Card, Field, Input, Select, Pill } from "@/components/ui";
+import { Button, Card, Checkbox, Field, Input, Select, Pill } from "@/components/ui";
 import * as api from "@/lib/api";
 import { supabase } from "@/lib/supabase";
+import { generateTotp } from "@/lib/totp";
 
 const SERVICES = [
   { id: "whatsapp", label: "WhatsApp" },
@@ -59,17 +61,50 @@ export default function DashboardPage() {
 
 // ---------- Auth screen ----------
 
+function passwordStrength(pw) {
+  if (!pw) return { label: "", tone: "neutral" };
+  let score = 0;
+  if (pw.length >= 8) score++;
+  if (pw.length >= 12) score++;
+  if (/[A-Z]/.test(pw) && /[a-z]/.test(pw)) score++;
+  if (/\d/.test(pw)) score++;
+  if (/[^A-Za-z0-9]/.test(pw)) score++;
+  if (score <= 1) return { label: "Weak", tone: "red" };
+  if (score <= 3) return { label: "Okay", tone: "amber" };
+  return { label: "Strong", tone: "mint" };
+}
+
 function AuthScreen() {
   const params = useSearchParams();
   const [mode, setMode] = useState(params.get("signup") === "1" ? "signup" : "login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [agreed, setAgreed] = useState(false);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
   const [confirmSent, setConfirmSent] = useState(false);
+  const [resent, setResent] = useState(false);
+
+  const strength = passwordStrength(password);
+
+  function validate() {
+    if (mode === "signup") {
+      if (password.length < 8) return "Password must be at least 8 characters.";
+      if (password !== confirmPassword) return "Passwords don't match.";
+      if (!agreed) return "You need to agree to the Terms to create an account.";
+    }
+    return null;
+  }
 
   async function handleSubmit(e) {
     e.preventDefault();
+    const validationError = validate();
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
     setError(null);
     setLoading(true);
     try {
@@ -93,12 +128,30 @@ function AuthScreen() {
     }
   }
 
+  async function handleResend() {
+    try {
+      await api.resendConfirmation(email);
+      setResent(true);
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
   if (confirmSent) {
     return (
       <div className="min-h-screen flex items-center justify-center p-6">
         <Card className="w-full max-w-[380px] text-center">
           <h3 className="text-[1.1rem] mb-2">Check your email</h3>
-          <p>We sent a confirmation link to <strong className="text-ink">{email}</strong>. Click it to finish creating your account.</p>
+          <p className="mb-4">
+            We sent a confirmation link to <strong className="text-ink">{email}</strong>. Click it to finish creating your account.
+          </p>
+          {resent ? (
+            <p className="text-mint text-[0.85rem]">Sent again — check your inbox (and spam folder).</p>
+          ) : (
+            <Button variant="ghost" className="w-full" onClick={handleResend}>
+              Resend confirmation email
+            </Button>
+          )}
         </Card>
       </div>
     );
@@ -112,7 +165,10 @@ function AuthScreen() {
             <button
               key={m}
               type="button"
-              onClick={() => setMode(m)}
+              onClick={() => {
+                setMode(m);
+                setError(null);
+              }}
               className={`flex-1 py-2.5 rounded-[7px] font-semibold text-[0.88rem] transition-colors ${
                 mode === m ? "bg-surface text-ink shadow-sm" : "text-ink-soft"
               }`}
@@ -126,21 +182,66 @@ function AuthScreen() {
             <Input
               type="email"
               required
+              autoComplete="email"
               placeholder="you@example.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
             />
           </Field>
           <Field label="Password">
-            <Input
-              type="password"
-              required
-              minLength={8}
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
+            <div className="relative">
+              <Input
+                type={showPassword ? "text" : "password"}
+                required
+                minLength={8}
+                autoComplete={mode === "signup" ? "new-password" : "current-password"}
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full pr-16"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((s) => !s)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-[0.75rem] font-semibold text-ink-faint hover:text-ink-soft"
+                tabIndex={-1}
+              >
+                {showPassword ? "Hide" : "Show"}
+              </button>
+            </div>
+            {mode === "signup" && password && (
+              <div className="mt-1">
+                <Pill tone={strength.tone}>{strength.label}</Pill>
+              </div>
+            )}
           </Field>
+          {mode === "signup" && (
+            <Field label="Confirm password">
+              <Input
+                type={showPassword ? "text" : "password"}
+                required
+                autoComplete="new-password"
+                placeholder="••••••••"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+              />
+            </Field>
+          )}
+          {mode === "signup" && (
+            <Checkbox
+              className="mb-4"
+              checked={agreed}
+              onChange={(e) => setAgreed(e.target.checked)}
+              label={
+                <>
+                  I agree to the{" "}
+                  <Link href="/terms" target="_blank" className="text-signal underline">
+                    Terms of Service
+                  </Link>
+                </>
+              }
+            />
+          )}
           {error && (
             <div className="bg-red-soft text-red text-[0.85rem] px-3 py-2.5 rounded-lg mb-3.5">
               {error}
@@ -157,10 +258,42 @@ function AuthScreen() {
 
 // ---------- Dashboard shell ----------
 
+const NAV_SECTIONS = [
+  {
+    heading: null,
+    items: [
+      { id: "buy", label: "Buy a number" },
+      { id: "wallet", label: "Fund Wallet" },
+    ],
+  },
+  {
+    heading: "Activity",
+    items: [
+      { id: "orders", label: "Order History" },
+      { id: "ledger", label: "Transactions" },
+    ],
+  },
+  {
+    heading: "Tools",
+    items: [
+      { id: "2fa", label: "2FA Generator" },
+      { id: "settings", label: "Settings" },
+    ],
+  },
+  {
+    heading: "Community",
+    items: [
+      { id: "support", label: "Support", external: "https://t.me/SwiftVerifyNGcc" },
+      { id: "telegram", label: "Telegram News", external: "https://t.me/swiftverifyng" },
+    ],
+  },
+];
+
 function DashboardShell() {
   const [view, setView] = useState("buy");
   const [balance, setBalance] = useState(null);
   const [topupOpen, setTopupOpen] = useState(false);
+  const [navOpen, setNavOpen] = useState(false);
 
   const refreshBalance = useCallback(async () => {
     try {
@@ -185,31 +318,74 @@ function DashboardShell() {
     api.logout();
   }
 
+  const VIEW_TITLES = {
+    buy: "Buy a number",
+    wallet: "Fund Wallet",
+    orders: "Order History",
+    ledger: "Transactions",
+    "2fa": "2FA Generator",
+    settings: "Settings",
+  };
+
   return (
-    <div className="grid md:grid-cols-[220px_1fr] min-h-screen">
+    <div className="grid md:grid-cols-[240px_1fr] min-h-screen">
       <aside className="border-r border-line p-6 flex md:flex-col justify-between md:justify-start gap-6 items-center md:items-stretch">
-        <div className="flex items-center gap-2 font-display font-bold text-[1.1rem]">
-          <span className="w-2.5 h-2.5 rounded-full bg-mint" />
-          Relay
+        <div className="flex items-center justify-between w-full md:w-auto">
+          <div className="flex items-center gap-2 font-display font-bold text-[1.1rem]">
+            <span className="w-2.5 h-2.5 rounded-full bg-mint" />
+            Relay
+          </div>
+          <button
+            className="md:hidden text-ink-soft text-[0.85rem] font-semibold"
+            onClick={() => setNavOpen((o) => !o)}
+          >
+            Menu
+          </button>
         </div>
-        <nav className="hidden md:flex flex-col gap-1 flex-1">
-          <button
-            onClick={() => setView("buy")}
-            className={`text-left px-3 py-2.5 rounded-lg text-[0.9rem] font-medium transition-colors ${
-              view === "buy" ? "gradient-signal text-white" : "text-ink-soft hover:bg-surface-hover hover:text-ink"
-            }`}
-          >
-            Buy a number
-          </button>
-          <button
-            onClick={() => setView("ledger")}
-            className={`text-left px-3 py-2.5 rounded-lg text-[0.9rem] font-medium transition-colors ${
-              view === "ledger" ? "gradient-signal text-white" : "text-ink-soft hover:bg-surface-hover hover:text-ink"
-            }`}
-          >
-            Wallet history
-          </button>
+
+        <nav className={`${navOpen ? "flex" : "hidden"} md:flex flex-col gap-4 flex-1 overflow-y-auto`}>
+          {NAV_SECTIONS.map((section, i) => (
+            <div key={i}>
+              {section.heading && (
+                <div className="text-[0.68rem] font-semibold text-ink-faint uppercase tracking-wide px-3 mb-1.5">
+                  {section.heading}
+                </div>
+              )}
+              <div className="flex flex-col gap-1">
+                {section.items.map((item) =>
+                  item.external ? (
+                    <a
+                      key={item.id}
+                      href={item.external}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-left px-3 py-2.5 rounded-lg text-[0.9rem] font-medium transition-colors text-ink-soft hover:bg-surface-hover hover:text-ink flex items-center justify-between"
+                    >
+                      {item.label}
+                      <span className="text-ink-faint text-[0.75rem]">↗</span>
+                    </a>
+                  ) : (
+                    <button
+                      key={item.id}
+                      onClick={() => {
+                        setView(item.id);
+                        setNavOpen(false);
+                      }}
+                      className={`text-left px-3 py-2.5 rounded-lg text-[0.9rem] font-medium transition-colors ${
+                        view === item.id
+                          ? "gradient-signal text-white"
+                          : "text-ink-soft hover:bg-surface-hover hover:text-ink"
+                      }`}
+                    >
+                      {item.label}
+                    </button>
+                  )
+                )}
+              </div>
+            </div>
+          ))}
         </nav>
+
         <Button variant="ghost" onClick={handleLogout} className="w-auto md:w-full">
           Log out
         </Button>
@@ -230,16 +406,17 @@ function DashboardShell() {
           </Button>
         </div>
 
-        {view === "buy" ? (
-          <BuyView onBalanceChange={refreshBalance} />
-        ) : (
-          <LedgerView />
-        )}
+        <h2 className="text-[1.3rem] font-display font-semibold mb-5">{VIEW_TITLES[view]}</h2>
+
+        {view === "buy" && <BuyView onBalanceChange={refreshBalance} />}
+        {view === "wallet" && <FundWalletView onBalanceChange={refreshBalance} />}
+        {view === "orders" && <OrderHistoryView />}
+        {view === "ledger" && <LedgerView />}
+        {view === "2fa" && <TwoFAView />}
+        {view === "settings" && <SettingsView />}
       </main>
 
-      {topupOpen && (
-        <TopupModal onClose={() => setTopupOpen(false)} />
-      )}
+      {topupOpen && <TopupModal onClose={() => setTopupOpen(false)} />}
     </div>
   );
 }
@@ -519,6 +696,317 @@ function TopupModal({ onClose }) {
             {loading ? "Starting…" : "Continue to payment"}
           </Button>
         </div>
+      </Card>
+    </div>
+  );
+}
+
+// ---------- Fund Wallet view ----------
+
+const QUICK_AMOUNTS = [1000, 2000, 5000, 10000];
+
+function FundWalletView({ onBalanceChange }) {
+  const [amount, setAmount] = useState(2000);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  async function handleTopup() {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await api.initializeTopup(amount);
+      if (res.checkout_url) {
+        window.location.href = res.checkout_url;
+      } else {
+        throw new Error("No checkout URL returned — check your Korapay keys are configured.");
+      }
+    } catch (err) {
+      setError(err.message);
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="grid md:grid-cols-2 gap-6 items-start">
+      <Card>
+        <h3 className="text-[1.1rem] mb-1.5">Fund your wallet</h3>
+        <p className="mb-5">Pay with card, bank transfer, or USSD via Korapay. Funds land instantly.</p>
+
+        <Field label="Amount (NGN)">
+          <Input
+            type="number"
+            min={100}
+            step={100}
+            value={amount}
+            onChange={(e) => setAmount(Number(e.target.value))}
+            className="font-mono w-full"
+          />
+        </Field>
+
+        <div className="flex flex-wrap gap-2 mb-4.5">
+          {QUICK_AMOUNTS.map((a) => (
+            <button
+              key={a}
+              type="button"
+              onClick={() => setAmount(a)}
+              className={`px-3 py-1.5 rounded-full text-[0.8rem] font-semibold border transition-colors ${
+                amount === a
+                  ? "border-signal bg-signal-soft text-signal"
+                  : "border-line text-ink-soft hover:border-line-strong"
+              }`}
+            >
+              {formatNgn(a)}
+            </button>
+          ))}
+        </div>
+
+        {error && (
+          <div className="bg-red-soft text-red text-[0.85rem] px-3 py-2.5 rounded-lg mb-3.5">
+            {error}
+          </div>
+        )}
+
+        <Button variant="green" className="w-full" onClick={handleTopup} disabled={loading || amount < 100}>
+          {loading ? "Starting…" : `Fund with ${formatNgn(amount)}`}
+        </Button>
+      </Card>
+
+      <Card>
+        <h3 className="text-[1.1rem] mb-1.5">How it works</h3>
+        <ul className="text-[0.88rem] text-ink-soft flex flex-col gap-2.5 list-disc pl-4">
+          <li>You&apos;re redirected to Korapay&apos;s secure checkout to pay.</li>
+          <li>Once payment confirms, your wallet is credited automatically via webhook.</li>
+          <li>Credits are only deducted from your balance when an SMS is actually received — a cancelled or timed-out number is refunded.</li>
+        </ul>
+      </Card>
+    </div>
+  );
+}
+
+// ---------- Order history view ----------
+
+function OrderHistoryView() {
+  const [orders, setOrders] = useState(null);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    api.listOrders().then(setOrders).catch((err) => setError(err.message));
+  }, []);
+
+  return (
+    <Card>
+      {error && <p className="text-red">{error}</p>}
+      {!error && orders === null && <p>Loading…</p>}
+      {!error && orders && orders.length === 0 && (
+        <p className="text-ink-soft">No purchases yet — numbers you buy will show up here.</p>
+      )}
+      {!error && orders && orders.length > 0 && (
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse text-[0.88rem]">
+            <thead>
+              <tr>
+                {["Date", "Service", "Number", "Price", "Status", "Code"].map((h) => (
+                  <th
+                    key={h}
+                    className="text-left text-ink-faint font-semibold text-[0.75rem] uppercase tracking-wide px-2.5 py-2 border-b border-line whitespace-nowrap"
+                  >
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {orders.map((o) => {
+                const [tone, label] = STATUS_MAP[o.status] || ["neutral", o.status];
+                return (
+                  <tr key={o.id}>
+                    <td className="px-2.5 py-2.5 border-b border-line whitespace-nowrap">
+                      {new Date(o.created_at).toLocaleString()}
+                    </td>
+                    <td className="px-2.5 py-2.5 border-b border-line capitalize">{o.service}</td>
+                    <td className="px-2.5 py-2.5 border-b border-line font-mono">{o.phone_number}</td>
+                    <td className="px-2.5 py-2.5 border-b border-line font-mono">{formatNgn(o.price_ngn)}</td>
+                    <td className="px-2.5 py-2.5 border-b border-line">
+                      <Pill tone={tone}>{label}</Pill>
+                    </td>
+                    <td className="px-2.5 py-2.5 border-b border-line font-mono">{o.sms_code || "—"}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+// ---------- 2FA generator view ----------
+
+function TwoFAView() {
+  const [secret, setSecret] = useState("");
+  const [code, setCode] = useState(null);
+  const [secondsLeft, setSecondsLeft] = useState(0);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    if (!code) return;
+    const interval = setInterval(async () => {
+      try {
+        const result = await generateTotp(secret);
+        setCode(result.code);
+        setSecondsLeft(result.secondsLeft);
+      } catch (_) {
+        // secret hasn't changed since the last successful generation, ignore
+      }
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [code, secret]);
+
+  async function handleGenerate(e) {
+    e.preventDefault();
+    setError(null);
+    try {
+      const result = await generateTotp(secret);
+      setCode(result.code);
+      setSecondsLeft(result.secondsLeft);
+    } catch (err) {
+      setError(err.message);
+      setCode(null);
+    }
+  }
+
+  return (
+    <div className="grid md:grid-cols-2 gap-6 items-start">
+      <Card>
+        <h3 className="text-[1.1rem] mb-1.5">2FA code generator</h3>
+        <p className="mb-5">
+          Paste the Base32 setup key an app gave you (the one under the QR code) to generate the same
+          6-digit codes here — handy when you don&apos;t have your authenticator app on hand. This runs
+          entirely in your browser; your secret is never sent anywhere.
+        </p>
+        <form onSubmit={handleGenerate}>
+          <Field label="Secret key">
+            <Input
+              type="text"
+              required
+              placeholder="e.g. JBSWY3DPEHPK3PXP"
+              value={secret}
+              onChange={(e) => setSecret(e.target.value)}
+              className="font-mono w-full"
+            />
+          </Field>
+          {error && (
+            <div className="bg-red-soft text-red text-[0.85rem] px-3 py-2.5 rounded-lg mb-3.5">
+              {error}
+            </div>
+          )}
+          <Button type="submit" variant="primary" className="w-full">
+            Generate code
+          </Button>
+        </form>
+      </Card>
+
+      {code && (
+        <Card className="text-center">
+          <div className="text-[0.72rem] text-ink-faint uppercase tracking-wide mb-2">Current code</div>
+          <div className="font-mono text-[2.4rem] font-semibold tracking-[0.15em] mb-3">{code}</div>
+          <Pill tone={secondsLeft <= 5 ? "amber" : "mint"}>Refreshes in {secondsLeft}s</Pill>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+// ---------- Settings view ----------
+
+function SettingsView() {
+  const [email, setEmail] = useState(null);
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    api.getCurrentUser().then((u) => setEmail(u?.email ?? null)).catch(() => {});
+  }, []);
+
+  async function handleChangePassword(e) {
+    e.preventDefault();
+    setError(null);
+    setSaved(false);
+    if (newPassword.length < 8) {
+      setError("Password must be at least 8 characters.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setError("Passwords don't match.");
+      return;
+    }
+    setSaving(true);
+    try {
+      await api.changePassword(newPassword);
+      setSaved(true);
+      setNewPassword("");
+      setConfirmPassword("");
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="grid md:grid-cols-2 gap-6 items-start">
+      <Card>
+        <h3 className="text-[1.1rem] mb-1.5">Account</h3>
+        <Field label="Email">
+          <Input type="email" value={email ?? ""} disabled className="w-full" />
+        </Field>
+        <p className="text-[0.8rem] text-ink-faint">
+          Need to change your email? <a href="mailto:support@swiftverifyng.com" className="text-signal underline">Contact support</a>.
+        </p>
+      </Card>
+
+      <Card>
+        <h3 className="text-[1.1rem] mb-1.5">Change password</h3>
+        <form onSubmit={handleChangePassword}>
+          <Field label="New password">
+            <Input
+              type="password"
+              required
+              minLength={8}
+              autoComplete="new-password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              className="w-full"
+            />
+          </Field>
+          <Field label="Confirm new password">
+            <Input
+              type="password"
+              required
+              autoComplete="new-password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              className="w-full"
+            />
+          </Field>
+          {error && (
+            <div className="bg-red-soft text-red text-[0.85rem] px-3 py-2.5 rounded-lg mb-3.5">
+              {error}
+            </div>
+          )}
+          {saved && (
+            <div className="bg-mint-soft text-mint text-[0.85rem] px-3 py-2.5 rounded-lg mb-3.5">
+              Password updated.
+            </div>
+          )}
+          <Button type="submit" variant="primary" className="w-full" disabled={saving}>
+            {saving ? "Saving…" : "Update password"}
+          </Button>
+        </form>
       </Card>
     </div>
   );

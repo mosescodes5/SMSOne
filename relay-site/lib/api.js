@@ -27,6 +27,22 @@ export async function logout() {
   await supabase.auth.signOut();
 }
 
+export async function resendConfirmation(email) {
+  const { error } = await supabase.auth.resend({ type: "signup", email });
+  if (error) throw new Error(error.message);
+}
+
+export async function getCurrentUser() {
+  const { data, error } = await supabase.auth.getUser();
+  if (error) throw new Error(error.message);
+  return data.user;
+}
+
+export async function changePassword(newPassword) {
+  const { error } = await supabase.auth.updateUser({ password: newPassword });
+  if (error) throw new Error(error.message);
+}
+
 /** Current access token, or null if not logged in. Cheap — Supabase caches
  *  the session and only hits the network if the token actually needs
  *  refreshing. */
@@ -82,6 +98,8 @@ export const buyNumber = (service, country) =>
   api(`/orders?${qs({ service, country })}`, { method: "POST" });
 
 export const checkOrder = (orderId) => api(`/orders/${orderId}`);
+
+export const listOrders = () => api("/orders");
 
 export const cancelOrder = (orderId) =>
   api(`/orders/${orderId}/cancel`, { method: "POST" });

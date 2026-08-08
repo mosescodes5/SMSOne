@@ -13,6 +13,7 @@ export function Button({
     ghost:
       "bg-transparent text-ink border-line hover:border-line-strong hover:bg-surface",
     mint: "bg-mint text-[#0B231C] border-transparent hover:brightness-110",
+    green: "bg-mint text-[#0B231C] border-transparent hover:brightness-110",
   };
   return (
     <Tag className={`${base} ${variants[variant]} ${className}`} {...props}>
@@ -55,6 +56,19 @@ export function Select({ children, ...props }) {
     <select className={inputBase} {...props}>
       {children}
     </select>
+  );
+}
+
+export function Checkbox({ label, className = "", ...props }) {
+  return (
+    <label className={`flex items-start gap-2.5 text-[0.82rem] text-ink-soft cursor-pointer ${className}`}>
+      <input
+        type="checkbox"
+        className="mt-[3px] h-[15px] w-[15px] shrink-0 rounded border-line accent-mint"
+        {...props}
+      />
+      <span>{label}</span>
+    </label>
   );
 }
 

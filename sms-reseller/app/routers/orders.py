@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from app.auth import CurrentUser, get_current_user
 from app.config import settings
@@ -12,6 +12,18 @@ from app.providers import get_provider
 from app.schemas import OrderRead
 
 router = APIRouter(prefix="/orders", tags=["orders"])
+
+
+@router.get("", response_model=list[OrderRead])
+def list_orders(
+    user: CurrentUser = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    """Order history / purchase log for the logged-in user, newest first."""
+    orders = session.exec(
+        select(Order).where(Order.user_id == user.id).order_by(Order.created_at.desc())
+    ).all()
+    return orders
 
 
 @router.get("/price")

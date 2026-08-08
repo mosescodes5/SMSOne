@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select
 
 from app.auth import CurrentUser, get_current_user
+from app.config import settings
 from app.database import get_session
 from app.models import LedgerEntry, Wallet
 from app.schemas import LedgerEntryRead
@@ -24,10 +25,15 @@ def topup_dev_only(
     Local testing ONLY — credits the wallet with no real payment involved.
     For real top-ups, the frontend calls POST /payments/korapay/initialize and
     the wallet is credited by the /payments/korapay/webhook handler once Korapay
-    confirms the charge. Delete or gate this route behind a DEBUG flag before
-    deploying, since anyone with a valid Supabase session could call it to
-    mint free balance.
+    confirms the charge.
+
+    Gated behind settings.debug (see .env: debug=true) — with debug off
+    (the production default), this 404s instead of existing at all, so it
+    can't be found or called no matter what credentials someone has.
     """
+    if not settings.debug:
+        raise HTTPException(status_code=404, detail="Not found")
+
     if amount_ngn <= 0:
         raise HTTPException(status_code=400, detail="Amount must be positive")
 

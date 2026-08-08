@@ -13,6 +13,7 @@ from app.payments.korapay import (
     verify_transaction,
     verify_webhook_signature,
 )
+from app.rate_limit import limiter
 
 router = APIRouter(prefix="/payments/korapay", tags=["payments"])
 
@@ -21,7 +22,9 @@ MAX_TOPUP_NGN = 500_000  # sanity ceiling; tune to your risk appetite
 
 
 @router.post("/initialize")
+@limiter.limit("5/minute")
 async def initialize_topup(
+    request: Request,
     amount_ngn: float,
     user: CurrentUser = Depends(get_current_user),
     session: Session = Depends(get_session),

@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlmodel import Session, select
 
 from app.auth import CurrentUser, get_current_user
@@ -9,6 +9,7 @@ from app.database import get_session
 from app.models import LedgerEntry, Order, OrderStatus, Wallet
 from app.pricing import price_for_customer
 from app.providers import get_provider
+from app.rate_limit import limiter
 from app.schemas import OrderRead
 
 
@@ -37,7 +38,9 @@ def list_orders(
 
 
 @router.get("/price")
+@limiter.limit("30/minute")
 async def preview_price(
+    request: Request,
     service: str,
     country: str,
 ):
@@ -90,7 +93,9 @@ async def preview_price(
 
 
 @router.post("", response_model=OrderRead)
+@limiter.limit("10/minute")
 async def buy_number(
+    request: Request,
     service: str,
     country: str,
     user: CurrentUser = Depends(get_current_user),
@@ -209,7 +214,9 @@ async def buy_number(
     "/{order_id}",
     response_model=OrderRead,
 )
+@limiter.limit("40/minute")
 async def check_order(
+    request: Request,
     order_id: int,
     user: CurrentUser = Depends(get_current_user),
     session: Session = Depends(get_session),
@@ -294,7 +301,9 @@ async def check_order(
     "/{order_id}/cancel",
     response_model=OrderRead,
 )
+@limiter.limit("20/minute")
 async def cancel_order(
+    request: Request,
     order_id: int,
     user: CurrentUser = Depends(get_current_user),
     session: Session = Depends(get_session),

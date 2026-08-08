@@ -16,6 +16,18 @@ class Settings(BaseSettings):
 
 
     # ---------------------------------------------------------
+    # ENVIRONMENT
+    # ---------------------------------------------------------
+
+    # Set debug=true only in local/.env for dev — this gates things that must
+    # never be reachable in production, like the free-money dev topup route.
+    # Leave it unset (defaults to False) in your production environment
+    # variables (Vercel/Railway/wherever you deploy) — don't just trust the
+    # default; explicitly confirm it's false/absent in prod env vars too.
+    debug: bool = False
+
+
+    # ---------------------------------------------------------
     # SUPABASE
     # ---------------------------------------------------------
 

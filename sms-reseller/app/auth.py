@@ -89,11 +89,17 @@ class CurrentUser:
     id: uuid.UUID
     email: str
     wallet_balance_ngn: float
+    is_admin: bool
+    is_suspended: bool
 
 
 import logging
 
 logger = logging.getLogger("relay.auth")
+
+
+def _admin_emails() -> set[str]:
+    return {e.strip().lower() for e in settings.admin_emails.split(",") if e.strip()}
 
 
 def get_current_user(
@@ -126,20 +132,45 @@ def get_current_user(
     except ValueError:
         raise credentials_error
 
-    wallet = get_or_create_wallet(session, user_id)
-    return CurrentUser(id=user_id, email=email, wallet_balance_ngn=wallet.wallet_balance_ngn)
+    wallet = get_or_create_wallet(session, user_id, email=email)
+
+    is_admin = wallet.is_admin or email.lower() in _admin_emails()
+
+    if wallet.is_suspended:
+        raise HTTPException(status_code=403, detail="This account has been suspended. Contact support.")
+
+    return CurrentUser(
+        id=user_id,
+        email=email,
+        wallet_balance_ngn=wallet.wallet_balance_ngn,
+        is_admin=is_admin,
+        is_suspended=wallet.is_suspended,
+    )
 
 
-def get_or_create_wallet(session: Session, user_id: uuid.UUID) -> Wallet:
+def require_admin(user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
+    if not user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return user
+
+
+def get_or_create_wallet(session: Session, user_id: uuid.UUID, email: str | None = None) -> Wallet:
     """
     Normally a no-op fallback — the Postgres trigger in supabase_schema.sql
     already creates the wallet row at signup. This exists so local dev
     against plain SQLite (no trigger support) still works, and as a safety
     net if a user somehow reaches the backend before the trigger's committed.
+    Also keeps the cached `email` column fresh, since Supabase lets users
+    change their email after signup.
     """
     wallet = session.get(Wallet, user_id)
     if wallet is None:
-        wallet = Wallet(user_id=user_id, wallet_balance_ngn=0.0)
+        wallet = Wallet(user_id=user_id, wallet_balance_ngn=0.0, email=email)
+        session.add(wallet)
+        session.commit()
+        session.refresh(wallet)
+    elif email and wallet.email != email:
+        wallet.email = email
         session.add(wallet)
         session.commit()
         session.refresh(wallet)

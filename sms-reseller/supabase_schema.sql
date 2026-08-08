@@ -15,9 +15,17 @@ create extension if not exists "pgcrypto";
 -- below; the backend never inserts a row here directly on signup.
 create table if not exists public.wallets (
   user_id uuid primary key references auth.users (id) on delete cascade,
+  email text,
   wallet_balance_ngn numeric(14, 2) not null default 0,
+  is_admin boolean not null default false,
+  is_suspended boolean not null default false,
   created_at timestamptz not null default now()
 );
+
+-- Safe to re-run on an existing database that predates these columns.
+alter table public.wallets add column if not exists email text;
+alter table public.wallets add column if not exists is_admin boolean not null default false;
+alter table public.wallets add column if not exists is_suspended boolean not null default false;
 
 alter table public.wallets enable row level security;
 
@@ -109,6 +117,21 @@ create policy "Users can view their own payments"
   on public.pending_payments for select
   using (auth.uid() = user_id);
 
+-- ---------- site_settings ----------
+-- Key/value store the admin panel writes to (WhatsApp group link, Telegram
+-- channel, support contact, etc). No RLS policies granting access here on
+-- purpose — the backend reads/writes it via its direct Postgres connection
+-- (not subject to RLS), and it's not meant to be queried from the frontend
+-- via supabase-js. Public reads go through GET /settings on the backend,
+-- which applies its own defaults for any key not yet set.
+create table if not exists public.site_settings (
+  key text primary key,
+  value text not null default '',
+  updated_at timestamptz not null default now()
+);
+
+alter table public.site_settings enable row level security;
+
 -- ---------- auto-create wallet on signup ----------
 -- Fires whenever Supabase Auth creates a new row in auth.users (i.e. right
 -- after someone signs up). This is what replaces the old /auth/register
@@ -119,8 +142,8 @@ language plpgsql
 security definer set search_path = public
 as $$
 begin
-  insert into public.wallets (user_id, wallet_balance_ngn)
-  values (new.id, 0);
+  insert into public.wallets (user_id, email, wallet_balance_ngn)
+  values (new.id, new.email, 0);
   return new;
 end;
 $$;

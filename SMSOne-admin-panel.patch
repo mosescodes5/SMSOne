@@ -1,0 +1,1167 @@
+diff --git a/relay-site/app/admin/page.js b/relay-site/app/admin/page.js
+new file mode 100644
+index 0000000..562435e
+--- /dev/null
++++ b/relay-site/app/admin/page.js
+@@ -0,0 +1,493 @@
++"use client";
++
++import { useCallback, useEffect, useState } from "react";
++import Link from "next/link";
++import { Button, Card, Field, Input, Pill } from "@/components/ui";
++import * as api from "@/lib/api";
++import { supabase } from "@/lib/supabase";
++
++function formatNgn(amount) {
++  return `₦${Number(amount).toLocaleString("en-NG")}`;
++}
++
++export default function AdminPage() {
++  const [session, setSession] = useState(undefined);
++  const [profile, setProfile] = useState(undefined); // undefined = checking, null = not admin
++
++  useEffect(() => {
++    supabase.auth.getSession().then(({ data }) => setSession(data.session));
++    const { data: listener } = supabase.auth.onAuthStateChange((_e, s) => setSession(s));
++    return () => listener.subscription.unsubscribe();
++  }, []);
++
++  useEffect(() => {
++    if (!session) return;
++    api
++      .getMyProfile()
++      .then((p) => setProfile(p.is_admin ? p : null))
++      .catch(() => setProfile(null));
++  }, [session]);
++
++  if (session === undefined || (session && profile === undefined)) return null;
++
++  if (!session) {
++    return (
++      <div className="min-h-screen flex items-center justify-center p-6 text-center">
++        <Card className="max-w-[380px]">
++          <h3 className="text-[1.1rem] mb-2">Log in required</h3>
++          <p className="mb-4">You need to be logged in as an admin to view this page.</p>
++          <Button as={Link} href="/dashboard" variant="primary" className="w-full">
++            Go to login
++          </Button>
++        </Card>
++      </div>
++    );
++  }
++
++  if (!profile) {
++    return (
++      <div className="min-h-screen flex items-center justify-center p-6 text-center">
++        <Card className="max-w-[380px]">
++          <h3 className="text-[1.1rem] mb-2">Access denied</h3>
++          <p className="mb-4">This account doesn&apos;t have admin access.</p>
++          <Button as={Link} href="/dashboard" variant="ghost" className="w-full">
++            Back to dashboard
++          </Button>
++        </Card>
++      </div>
++    );
++  }
++
++  return <AdminShell />;
++}
++
++const TABS = [
++  { id: "overview", label: "Overview" },
++  { id: "links", label: "Site Links" },
++  { id: "users", label: "Users" },
++  { id: "orders", label: "Orders" },
++];
++
++function AdminShell() {
++  const [tab, setTab] = useState("overview");
++
++  return (
++    <div className="grid md:grid-cols-[220px_1fr] min-h-screen">
++      <aside className="border-r border-line p-6 flex md:flex-col justify-between md:justify-start gap-6 items-center md:items-stretch">
++        <div>
++          <div className="flex items-center gap-2 font-display font-bold text-[1.1rem] mb-1">
++            <span className="w-2.5 h-2.5 rounded-full bg-signal" />
++            Admin
++          </div>
++          <Link href="/dashboard" className="text-[0.78rem] text-ink-faint hover:text-ink-soft">
++            ← Back to dashboard
++          </Link>
++        </div>
++        <nav className="hidden md:flex flex-col gap-1 flex-1">
++          {TABS.map((t) => (
++            <button
++              key={t.id}
++              onClick={() => setTab(t.id)}
++              className={`text-left px-3 py-2.5 rounded-lg text-[0.9rem] font-medium transition-colors ${
++                tab === t.id ? "gradient-signal text-white" : "text-ink-soft hover:bg-surface-hover hover:text-ink"
++              }`}
++            >
++              {t.label}
++            </button>
++          ))}
++        </nav>
++      </aside>
++
++      <main className="p-6 md:p-10">
++        <h2 className="text-[1.3rem] font-display font-semibold mb-5">
++          {TABS.find((t) => t.id === tab)?.label}
++        </h2>
++        {tab === "overview" && <OverviewTab />}
++        {tab === "links" && <LinksTab />}
++        {tab === "users" && <UsersTab />}
++        {tab === "orders" && <OrdersTab />}
++      </main>
++    </div>
++  );
++}
++
++// ---------- Overview ----------
++
++function OverviewTab() {
++  const [stats, setStats] = useState(null);
++  const [error, setError] = useState(null);
++
++  useEffect(() => {
++    api.getAdminStats().then(setStats).catch((err) => setError(err.message));
++  }, []);
++
++  if (error) return <p className="text-red">{error}</p>;
++  if (!stats) return <p>Loading…</p>;
++
++  const cards = [
++    { label: "Total users", value: stats.total_users.toLocaleString("en-NG") },
++    { label: "Total orders", value: stats.total_orders.toLocaleString("en-NG") },
++    { label: "Pending orders", value: stats.orders_pending.toLocaleString("en-NG") },
++    { label: "Completed orders", value: stats.orders_received.toLocaleString("en-NG") },
++    { label: "Total wallet balances", value: formatNgn(stats.total_wallet_balance_ngn) },
++    { label: "Revenue (order charges)", value: formatNgn(stats.total_revenue_ngn) },
++    { label: "Total top-ups", value: formatNgn(stats.total_topups_ngn) },
++  ];
++
++  return (
++    <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
++      {cards.map((c) => (
++        <Card key={c.label}>
++          <div className="text-[0.75rem] text-ink-faint font-semibold uppercase tracking-wide mb-1.5">
++            {c.label}
++          </div>
++          <div className="font-mono text-[1.5rem] font-semibold">{c.value}</div>
++        </Card>
++      ))}
++    </div>
++  );
++}
++
++// ---------- Site links ----------
++
++const LINK_FIELDS = [
++  { key: "whatsapp_group_url", label: "WhatsApp group link" },
++  { key: "telegram_url", label: "Telegram news channel" },
++  { key: "support_ticket_url", label: "Support / ticket link" },
++  { key: "support_email", label: "Support email" },
++  { key: "support_phone", label: "Support phone number" },
++];
++
++function LinksTab() {
++  const [form, setForm] = useState(null);
++  const [saving, setSaving] = useState(false);
++  const [error, setError] = useState(null);
++  const [saved, setSaved] = useState(false);
++
++  useEffect(() => {
++    api.getAdminSettings().then(setForm).catch((err) => setError(err.message));
++  }, []);
++
++  async function handleSave(e) {
++    e.preventDefault();
++    setSaving(true);
++    setError(null);
++    setSaved(false);
++    try {
++      const updated = await api.updateAdminSettings(form);
++      setForm(updated);
++      setSaved(true);
++    } catch (err) {
++      setError(err.message);
++    } finally {
++      setSaving(false);
++    }
++  }
++
++  if (error && !form) return <p className="text-red">{error}</p>;
++  if (!form) return <p>Loading…</p>;
++
++  return (
++    <Card className="max-w-[560px]">
++      <p className="mb-5 text-ink-soft">
++        These links show up across the site — in the dashboard sidebar, footer, and anywhere else they&apos;re referenced.
++      </p>
++      <form onSubmit={handleSave}>
++        {LINK_FIELDS.map((f) => (
++          <Field key={f.key} label={f.label}>
++            <Input
++              type="text"
++              value={form[f.key] || ""}
++              onChange={(e) => setForm({ ...form, [f.key]: e.target.value })}
++              className="w-full"
++            />
++          </Field>
++        ))}
++        <Field label="Announcement banner (optional)">
++          <Input
++            type="text"
++            placeholder="e.g. Scheduled maintenance tonight 11pm–1am"
++            value={form.announcement || ""}
++            onChange={(e) => setForm({ ...form, announcement: e.target.value })}
++            className="w-full"
++          />
++        </Field>
++        {error && (
++          <div className="bg-red-soft text-red text-[0.85rem] px-3 py-2.5 rounded-lg mb-3.5">{error}</div>
++        )}
++        {saved && (
++          <div className="bg-mint-soft text-mint text-[0.85rem] px-3 py-2.5 rounded-lg mb-3.5">Saved.</div>
++        )}
++        <Button type="submit" variant="primary" disabled={saving}>
++          {saving ? "Saving…" : "Save changes"}
++        </Button>
++      </form>
++    </Card>
++  );
++}
++
++// ---------- Users ----------
++
++function UsersTab() {
++  const [users, setUsers] = useState(null);
++  const [q, setQ] = useState("");
++  const [error, setError] = useState(null);
++  const [adjustingUser, setAdjustingUser] = useState(null);
++
++  const load = useCallback(() => {
++    api.listAdminUsers(q).then(setUsers).catch((err) => setError(err.message));
++  }, [q]);
++
++  useEffect(() => {
++    const timeout = setTimeout(load, 250); // light debounce while typing
++    return () => clearTimeout(timeout);
++  }, [load]);
++
++  async function handleToggleAdmin(user) {
++    try {
++      const updated = await api.toggleUserAdmin(user.user_id);
++      setUsers((rows) => rows.map((r) => (r.user_id === user.user_id ? updated : r)));
++    } catch (err) {
++      alert(err.message);
++    }
++  }
++
++  async function handleToggleSuspend(user) {
++    try {
++      const updated = user.is_suspended
++        ? await api.unsuspendUser(user.user_id)
++        : await api.suspendUser(user.user_id);
++      setUsers((rows) => rows.map((r) => (r.user_id === user.user_id ? updated : r)));
++    } catch (err) {
++      alert(err.message);
++    }
++  }
++
++  return (
++    <div>
++      <div className="mb-4 max-w-[320px]">
++        <Input
++          type="text"
++          placeholder="Search by email…"
++          value={q}
++          onChange={(e) => setQ(e.target.value)}
++          className="w-full"
++        />
++      </div>
++      <Card>
++        {error && <p className="text-red">{error}</p>}
++        {!error && users === null && <p>Loading…</p>}
++        {!error && users && users.length === 0 && <p className="text-ink-soft">No users found.</p>}
++        {!error && users && users.length > 0 && (
++          <div className="overflow-x-auto">
++            <table className="w-full border-collapse text-[0.88rem]">
++              <thead>
++                <tr>
++                  {["Email", "Balance", "Status", "Joined", ""].map((h) => (
++                    <th
++                      key={h}
++                      className="text-left text-ink-faint font-semibold text-[0.75rem] uppercase tracking-wide px-2.5 py-2 border-b border-line whitespace-nowrap"
++                    >
++                      {h}
++                    </th>
++                  ))}
++                </tr>
++              </thead>
++              <tbody>
++                {users.map((u) => (
++                  <tr key={u.user_id}>
++                    <td className="px-2.5 py-2.5 border-b border-line">{u.email || "—"}</td>
++                    <td className="px-2.5 py-2.5 border-b border-line font-mono">{formatNgn(u.wallet_balance_ngn)}</td>
++                    <td className="px-2.5 py-2.5 border-b border-line">
++                      <div className="flex gap-1.5 flex-wrap">
++                        {u.is_admin && <Pill tone="signal">Admin</Pill>}
++                        {u.is_suspended && <Pill tone="red">Suspended</Pill>}
++                        {!u.is_admin && !u.is_suspended && <Pill tone="neutral">Active</Pill>}
++                      </div>
++                    </td>
++                    <td className="px-2.5 py-2.5 border-b border-line whitespace-nowrap">
++                      {new Date(u.created_at).toLocaleDateString()}
++                    </td>
++                    <td className="px-2.5 py-2.5 border-b border-line">
++                      <div className="flex gap-1.5 flex-wrap">
++                        <Button variant="ghost" className="!px-2.5 !py-1.5 !text-[0.78rem]" onClick={() => setAdjustingUser(u)}>
++                          Adjust wallet
++                        </Button>
++                        <Button variant="ghost" className="!px-2.5 !py-1.5 !text-[0.78rem]" onClick={() => handleToggleSuspend(u)}>
++                          {u.is_suspended ? "Unsuspend" : "Suspend"}
++                        </Button>
++                        <Button variant="ghost" className="!px-2.5 !py-1.5 !text-[0.78rem]" onClick={() => handleToggleAdmin(u)}>
++                          {u.is_admin ? "Revoke admin" : "Make admin"}
++                        </Button>
++                      </div>
++                    </td>
++                  </tr>
++                ))}
++              </tbody>
++            </table>
++          </div>
++        )}
++      </Card>
++
++      {adjustingUser && (
++        <AdjustWalletModal
++          user={adjustingUser}
++          onClose={() => setAdjustingUser(null)}
++          onDone={(updated) => {
++            setUsers((rows) => rows.map((r) => (r.user_id === updated.user_id ? updated : r)));
++            setAdjustingUser(null);
++          }}
++        />
++      )}
++    </div>
++  );
++}
++
++function AdjustWalletModal({ user, onClose, onDone }) {
++  const [amount, setAmount] = useState(0);
++  const [reason, setReason] = useState("");
++  const [loading, setLoading] = useState(false);
++  const [error, setError] = useState(null);
++
++  async function handleSubmit(e) {
++    e.preventDefault();
++    if (!amount) {
++      setError("Enter a non-zero amount — positive to credit, negative to debit.");
++      return;
++    }
++    setLoading(true);
++    setError(null);
++    try {
++      const updated = await api.adjustUserWallet(user.user_id, Number(amount), reason);
++      onDone(updated);
++    } catch (err) {
++      setError(err.message);
++    } finally {
++      setLoading(false);
++    }
++  }
++
++  return (
++    <div
++      className="fixed inset-0 bg-[rgba(16,23,40,0.4)] flex items-center justify-center z-50 p-5"
++      onClick={(e) => e.target === e.currentTarget && onClose()}
++    >
++      <Card className="w-full max-w-[380px]">
++        <h3 className="text-[1.1rem] mb-1.5">Adjust wallet</h3>
++        <p className="mb-4.5">
++          <strong className="text-ink">{user.email}</strong> — current balance {formatNgn(user.wallet_balance_ngn)}
++        </p>
++        <form onSubmit={handleSubmit}>
++          <Field label="Amount (NGN) — negative to debit">
++            <Input
++              type="number"
++              step="1"
++              value={amount}
++              onChange={(e) => setAmount(e.target.value)}
++              className="font-mono w-full"
++            />
++          </Field>
++          <Field label="Reason">
++            <Input
++              type="text"
++              placeholder="e.g. goodwill credit, chargeback correction"
++              value={reason}
++              onChange={(e) => setReason(e.target.value)}
++              className="w-full"
++            />
++          </Field>
++          {error && (
++            <div className="bg-red-soft text-red text-[0.85rem] px-3 py-2.5 rounded-lg mb-3.5">{error}</div>
++          )}
++          <div className="flex gap-2.5">
++            <Button type="button" variant="ghost" className="flex-1" onClick={onClose}>
++              Cancel
++            </Button>
++            <Button type="submit" variant="primary" className="flex-1" disabled={loading}>
++              {loading ? "Saving…" : "Apply"}
++            </Button>
++          </div>
++        </form>
++      </Card>
++    </div>
++  );
++}
++
++// ---------- Orders ----------
++
++const STATUS_TONES = {
++  pending: "amber",
++  received: "mint",
++  expired: "red",
++  cancelled: "neutral",
++};
++
++function OrdersTab() {
++  const [orders, setOrders] = useState(null);
++  const [status, setStatus] = useState("");
++  const [error, setError] = useState(null);
++
++  useEffect(() => {
++    api.listAdminOrders(status || undefined).then(setOrders).catch((err) => setError(err.message));
++  }, [status]);
++
++  return (
++    <div>
++      <div className="mb-4 flex gap-2 flex-wrap">
++        {["", "pending", "received", "expired", "cancelled"].map((s) => (
++          <button
++            key={s || "all"}
++            onClick={() => setStatus(s)}
++            className={`px-3 py-1.5 rounded-full text-[0.8rem] font-semibold border transition-colors capitalize ${
++              status === s
++                ? "border-signal bg-signal-soft text-signal"
++                : "border-line text-ink-soft hover:border-line-strong"
++            }`}
++          >
++            {s || "All"}
++          </button>
++        ))}
++      </div>
++      <Card>
++        {error && <p className="text-red">{error}</p>}
++        {!error && orders === null && <p>Loading…</p>}
++        {!error && orders && orders.length === 0 && <p className="text-ink-soft">No orders found.</p>}
++        {!error && orders && orders.length > 0 && (
++          <div className="overflow-x-auto">
++            <table className="w-full border-collapse text-[0.88rem]">
++              <thead>
++                <tr>
++                  {["Date", "User", "Service", "Number", "Price", "Status", "Code"].map((h) => (
++                    <th
++                      key={h}
++                      className="text-left text-ink-faint font-semibold text-[0.75rem] uppercase tracking-wide px-2.5 py-2 border-b border-line whitespace-nowrap"
++                    >
++                      {h}
++                    </th>
++                  ))}
++                </tr>
++              </thead>
++              <tbody>
++                {orders.map((o) => (
++                  <tr key={o.id}>
++                    <td className="px-2.5 py-2.5 border-b border-line whitespace-nowrap">
++                      {new Date(o.created_at).toLocaleString()}
++                    </td>
++                    <td className="px-2.5 py-2.5 border-b border-line">{o.user_email || "—"}</td>
++                    <td className="px-2.5 py-2.5 border-b border-line capitalize">{o.service}</td>
++                    <td className="px-2.5 py-2.5 border-b border-line font-mono">{o.phone_number}</td>
++                    <td className="px-2.5 py-2.5 border-b border-line font-mono">{formatNgn(o.price_ngn)}</td>
++                    <td className="px-2.5 py-2.5 border-b border-line">
++                      <Pill tone={STATUS_TONES[o.status] || "neutral"}>{o.status}</Pill>
++                    </td>
++                    <td className="px-2.5 py-2.5 border-b border-line font-mono">{o.sms_code || "—"}</td>
++                  </tr>
++                ))}
++              </tbody>
++            </table>
++          </div>
++        )}
++      </Card>
++    </div>
++  );
++}
+diff --git a/relay-site/app/dashboard/page.js b/relay-site/app/dashboard/page.js
+index ec8c4bd..9b1c960 100644
+--- a/relay-site/app/dashboard/page.js
++++ b/relay-site/app/dashboard/page.js
+@@ -258,7 +258,7 @@ function AuthScreen() {
+ 
+ // ---------- Dashboard shell ----------
+ 
+-const NAV_SECTIONS = [
++const NAV_SECTIONS_BASE = [
+   {
+     heading: null,
+     items: [
+@@ -280,13 +280,6 @@ const NAV_SECTIONS = [
+       { id: "settings", label: "Settings" },
+     ],
+   },
+-  {
+-    heading: "Community",
+-    items: [
+-      { id: "support", label: "Support", external: "https://t.me/SwiftVerifyNGcc" },
+-      { id: "telegram", label: "Telegram News", external: "https://t.me/swiftverifyng" },
+-    ],
+-  },
+ ];
+ 
+ function DashboardShell() {
+@@ -294,6 +287,8 @@ function DashboardShell() {
+   const [balance, setBalance] = useState(null);
+   const [topupOpen, setTopupOpen] = useState(false);
+   const [navOpen, setNavOpen] = useState(false);
++  const [isAdmin, setIsAdmin] = useState(false);
++  const [siteSettings, setSiteSettings] = useState(null);
+ 
+   const refreshBalance = useCallback(async () => {
+     try {
+@@ -312,8 +307,21 @@ function DashboardShell() {
+   useEffect(() => {
+     // eslint-disable-next-line react-hooks/set-state-in-effect
+     refreshBalance();
++    api.getMyProfile().then((p) => setIsAdmin(!!p.is_admin)).catch(() => {});
++    api.getPublicSettings().then(setSiteSettings).catch(() => {});
+   }, [refreshBalance]);
+ 
++  const NAV_SECTIONS = [
++    ...NAV_SECTIONS_BASE,
++    {
++      heading: "Community",
++      items: [
++        { id: "support", label: "Support", external: siteSettings?.support_ticket_url || "https://t.me/SwiftVerifyNGcc" },
++        { id: "telegram", label: "Telegram News", external: siteSettings?.telegram_url || "https://t.me/swiftverifyng" },
++      ],
++    },
++  ];
++
+   function handleLogout() {
+     api.logout();
+   }
+@@ -386,6 +394,14 @@ function DashboardShell() {
+           ))}
+         </nav>
+ 
++        {isAdmin && (
++          <Link
++            href="/admin"
++            className="text-left px-3 py-2.5 rounded-lg text-[0.9rem] font-semibold text-signal border border-signal-soft bg-signal-soft hover:brightness-105 transition-colors text-center md:text-left"
++          >
++            Admin panel
++          </Link>
++        )}
+         <Button variant="ghost" onClick={handleLogout} className="w-auto md:w-full">
+           Log out
+         </Button>
+diff --git a/relay-site/lib/api.js b/relay-site/lib/api.js
+index 7405573..b56ee3c 100644
+--- a/relay-site/lib/api.js
++++ b/relay-site/lib/api.js
+@@ -38,6 +38,9 @@ export async function getCurrentUser() {
+   return data.user;
+ }
+ 
++/** Backend /auth/me — includes is_admin, unlike the raw Supabase user object. */
++export const getMyProfile = () => api("/auth/me");
++
+ export async function changePassword(newPassword) {
+   const { error } = await supabase.auth.updateUser({ password: newPassword });
+   if (error) throw new Error(error.message);
+@@ -82,6 +85,34 @@ async function api(path, { method = "GET", auth = true } = {}) {
+   return data;
+ }
+ 
++/** Like `api`, but sends a JSON body — for endpoints that take a request
++ *  payload (e.g. admin actions) instead of query params. */
++async function apiWithBody(path, { method = "POST", body, auth = true } = {}) {
++  const headers = { "Content-Type": "application/json" };
++  if (auth) {
++    const token = await getAccessToken();
++    if (!token) throw new Error("Not logged in");
++    headers["Authorization"] = `Bearer ${token}`;
++  }
++
++  const res = await fetch(`${API_BASE}${path}`, {
++    method,
++    headers,
++    body: JSON.stringify(body),
++  });
++  let data = null;
++  try {
++    data = await res.json();
++  } catch (_) {
++    /* no body */
++  }
++  if (!res.ok) {
++    const detail = data?.detail || res.statusText;
++    throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
++  }
++  return data;
++}
++
+ // ---------- Wallet ----------
+ 
+ export const getBalance = () => api("/wallet/balance");
+@@ -110,3 +141,31 @@ export const initializeTopup = (amountNgn) =>
+   api(`/payments/korapay/initialize?${qs({ amount_ngn: amountNgn })}`, {
+     method: "POST",
+   });
++
++// ---------- Public settings (WhatsApp/Telegram/support links) ----------
++
++export const getPublicSettings = () => api("/settings", { auth: false });
++
++// ---------- Admin ----------
++
++export const getAdminSettings = () => api("/admin/settings");
++export const updateAdminSettings = (settings) =>
++  apiWithBody("/admin/settings", { method: "PUT", body: settings });
++
++export const listAdminUsers = (q = "") =>
++  api(`/admin/users${q ? `?${qs({ q })}` : ""}`);
++
++export const adjustUserWallet = (userId, amountNgn, reason) =>
++  apiWithBody(`/admin/users/${userId}/adjust-wallet`, {
++    method: "POST",
++    body: { amount_ngn: amountNgn, reason },
++  });
++
++export const suspendUser = (userId) => api(`/admin/users/${userId}/suspend`, { method: "POST" });
++export const unsuspendUser = (userId) => api(`/admin/users/${userId}/unsuspend`, { method: "POST" });
++export const toggleUserAdmin = (userId) => api(`/admin/users/${userId}/toggle-admin`, { method: "POST" });
++
++export const listAdminOrders = (status) =>
++  api(`/admin/orders${status ? `?${qs({ status })}` : ""}`);
++
++export const getAdminStats = () => api("/admin/stats");
+diff --git a/sms-reseller/app/auth.py b/sms-reseller/app/auth.py
+index 964727b..590fb87 100644
+--- a/sms-reseller/app/auth.py
++++ b/sms-reseller/app/auth.py
+@@ -89,6 +89,8 @@ class CurrentUser:
+     id: uuid.UUID
+     email: str
+     wallet_balance_ngn: float
++    is_admin: bool
++    is_suspended: bool
+ 
+ 
+ import logging
+@@ -96,6 +98,10 @@ import logging
+ logger = logging.getLogger("relay.auth")
+ 
+ 
++def _admin_emails() -> set[str]:
++    return {e.strip().lower() for e in settings.admin_emails.split(",") if e.strip()}
++
++
+ def get_current_user(
+     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+     session: Session = Depends(get_session),
+@@ -126,20 +132,45 @@ def get_current_user(
+     except ValueError:
+         raise credentials_error
+ 
+-    wallet = get_or_create_wallet(session, user_id)
+-    return CurrentUser(id=user_id, email=email, wallet_balance_ngn=wallet.wallet_balance_ngn)
++    wallet = get_or_create_wallet(session, user_id, email=email)
++
++    is_admin = wallet.is_admin or email.lower() in _admin_emails()
++
++    if wallet.is_suspended:
++        raise HTTPException(status_code=403, detail="This account has been suspended. Contact support.")
++
++    return CurrentUser(
++        id=user_id,
++        email=email,
++        wallet_balance_ngn=wallet.wallet_balance_ngn,
++        is_admin=is_admin,
++        is_suspended=wallet.is_suspended,
++    )
+ 
+ 
+-def get_or_create_wallet(session: Session, user_id: uuid.UUID) -> Wallet:
++def require_admin(user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
++    if not user.is_admin:
++        raise HTTPException(status_code=403, detail="Admin access required")
++    return user
++
++
++def get_or_create_wallet(session: Session, user_id: uuid.UUID, email: str | None = None) -> Wallet:
+     """
+     Normally a no-op fallback — the Postgres trigger in supabase_schema.sql
+     already creates the wallet row at signup. This exists so local dev
+     against plain SQLite (no trigger support) still works, and as a safety
+     net if a user somehow reaches the backend before the trigger's committed.
++    Also keeps the cached `email` column fresh, since Supabase lets users
++    change their email after signup.
+     """
+     wallet = session.get(Wallet, user_id)
+     if wallet is None:
+-        wallet = Wallet(user_id=user_id, wallet_balance_ngn=0.0)
++        wallet = Wallet(user_id=user_id, wallet_balance_ngn=0.0, email=email)
++        session.add(wallet)
++        session.commit()
++        session.refresh(wallet)
++    elif email and wallet.email != email:
++        wallet.email = email
+         session.add(wallet)
+         session.commit()
+         session.refresh(wallet)
+diff --git a/sms-reseller/app/config.py b/sms-reseller/app/config.py
+index 138d5f2..6202784 100644
+--- a/sms-reseller/app/config.py
++++ b/sms-reseller/app/config.py
+@@ -14,10 +14,17 @@ class Settings(BaseSettings):
+     supabase_url: str = ""
+     supabase_jwt_secret: str = ""  # Settings -> API -> JWT Secret (HS256 projects)
+ 
+-    provider: str = "mock"  # fivesim | smsactivate | smsman | mock
++    provider: str = "mock"  # fivesim | smsman | smsactivate | mock
+     provider_api_key: str = ""
+     provider_base_url: str = ""
+ 
++    # Comma-separated emails that are always treated as admin, regardless of
++    # the `is_admin` DB flag — this is how you bootstrap your very first
++    # admin account (yourself) without needing an admin panel to already
++    # exist. Once you're in, you can grant/revoke `is_admin` on other
++    # accounts from the panel itself.
++    admin_emails: str = ""
++
+     usd_ngn_rate: float = 1600.0
+ 
+     markup_percent: float = 45.0
+diff --git a/sms-reseller/app/main.py b/sms-reseller/app/main.py
+index f0eb396..9bc9f21 100644
+--- a/sms-reseller/app/main.py
++++ b/sms-reseller/app/main.py
+@@ -2,7 +2,7 @@ from fastapi import FastAPI
+ from fastapi.middleware.cors import CORSMiddleware
+ 
+ from app.database import init_db
+-from app.routers import auth, orders, payments, wallet
++from app.routers import admin, auth, orders, payments, settings, wallet
+ 
+ app = FastAPI(title="SMS Reseller API", version="0.1.0")
+ 
+@@ -27,6 +27,8 @@ app.include_router(auth.router)
+ app.include_router(wallet.router)
+ app.include_router(orders.router)
+ app.include_router(payments.router)
++app.include_router(settings.router)
++app.include_router(admin.router)
+ 
+ 
+ @app.get("/")
+diff --git a/sms-reseller/app/models.py b/sms-reseller/app/models.py
+index 9670f32..97eb43c 100644
+--- a/sms-reseller/app/models.py
++++ b/sms-reseller/app/models.py
+@@ -21,19 +21,37 @@ class Wallet(SQLModel, table=True):
+     """
+     Replaces the old User table. Auth itself now lives entirely in
+     Supabase's own auth.users table (managed by Supabase, not this app) —
+-    this table exists only to hold the one thing our app actually owns:
+-    the wallet balance. `user_id` is the Supabase Auth user's UUID, and a
+-    row here is created automatically by a Postgres trigger the moment
+-    someone signs up (see supabase_schema.sql) — the backend never inserts
+-    a row here itself.
++    this table exists only to hold the things our app actually owns:
++    wallet balance, admin/suspension flags, and a cached copy of the email
++    (handy for the admin panel without needing the Supabase service-role
++    API). `user_id` is the Supabase Auth user's UUID, and a row here is
++    created automatically by a Postgres trigger the moment someone signs up
++    (see supabase_schema.sql) — the backend never inserts a row here itself
++    except as a local-dev/SQLite fallback (see get_or_create_wallet).
+     """
+     __tablename__ = "wallets"
+ 
+     user_id: uuid.UUID = Field(primary_key=True)
++    email: Optional[str] = None
+     wallet_balance_ngn: float = 0.0
++    is_admin: bool = False
++    is_suspended: bool = False
+     created_at: datetime = Field(default_factory=utcnow)
+ 
+ 
++class SiteSetting(SQLModel, table=True):
++    """
++    Simple key/value store for things the admin panel lets you edit without
++    a redeploy — WhatsApp group link, Telegram channel, support contact,
++    etc. Read publicly via GET /settings, written only via the admin router.
++    """
++    __tablename__ = "site_settings"
++
++    key: str = Field(primary_key=True)
++    value: str = ""
++    updated_at: datetime = Field(default_factory=utcnow)
++
++
+ class LedgerEntry(SQLModel, table=True):
+     """Every wallet movement, for auditing. Never delete rows here."""
+     __tablename__ = "ledger_entries"
+diff --git a/sms-reseller/app/routers/admin.py b/sms-reseller/app/routers/admin.py
+new file mode 100644
+index 0000000..f0725fb
+--- /dev/null
++++ b/sms-reseller/app/routers/admin.py
+@@ -0,0 +1,188 @@
++import uuid
++from typing import Optional
++
++from fastapi import APIRouter, Depends, HTTPException, Query
++from sqlmodel import Session, select, func
++
++from app.auth import CurrentUser, require_admin
++from app.database import get_session
++from app.models import LedgerEntry, Order, SiteSetting, Wallet
++from app.routers.settings import DEFAULTS
++from app.schemas import (
++    AdminOrderRead,
++    AdminStatsRead,
++    AdminUserRead,
++    OrderRead,
++    SiteSettingsRead,
++    WalletAdjustRequest,
++)
++
++router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(require_admin)])
++
++
++# ---------- Site settings (WhatsApp/Telegram/support links, etc.) ----------
++
++
++@router.get("/settings", response_model=SiteSettingsRead)
++def get_settings(session: Session = Depends(get_session)):
++    rows = session.exec(select(SiteSetting)).all()
++    values = {**DEFAULTS, **{r.key: r.value for r in rows}}
++    return SiteSettingsRead(**values)
++
++
++@router.put("/settings", response_model=SiteSettingsRead)
++def update_settings(payload: SiteSettingsRead, session: Session = Depends(get_session)):
++    for key, value in payload.model_dump().items():
++        row = session.get(SiteSetting, key)
++        if row is None:
++            row = SiteSetting(key=key, value=value)
++        else:
++            row.value = value
++        session.add(row)
++    session.commit()
++    return get_settings(session)
++
++
++# ---------- Users ----------
++
++
++@router.get("/users", response_model=list[AdminUserRead])
++def list_users(
++    q: Optional[str] = Query(default=None, description="Filter by email substring"),
++    limit: int = Query(default=50, le=200),
++    offset: int = 0,
++    session: Session = Depends(get_session),
++):
++    stmt = select(Wallet).order_by(Wallet.created_at.desc())
++    if q:
++        stmt = stmt.where(Wallet.email.ilike(f"%{q}%"))
++    stmt = stmt.offset(offset).limit(limit)
++    return session.exec(stmt).all()
++
++
++@router.post("/users/{user_id}/adjust-wallet", response_model=AdminUserRead)
++def adjust_wallet(
++    user_id: uuid.UUID,
++    payload: WalletAdjustRequest,
++    admin: CurrentUser = Depends(require_admin),
++    session: Session = Depends(get_session),
++):
++    wallet = session.get(Wallet, user_id)
++    if wallet is None:
++        raise HTTPException(status_code=404, detail="User not found")
++
++    wallet.wallet_balance_ngn += payload.amount_ngn
++    session.add(wallet)
++    session.add(
++        LedgerEntry(
++            user_id=wallet.user_id,
++            amount_ngn=payload.amount_ngn,
++            reason=f"admin_adjust: {payload.reason}" if payload.reason else "admin_adjust",
++            balance_after_ngn=wallet.wallet_balance_ngn,
++        )
++    )
++    session.commit()
++    session.refresh(wallet)
++    return wallet
++
++
++@router.post("/users/{user_id}/suspend", response_model=AdminUserRead)
++def suspend_user(user_id: uuid.UUID, session: Session = Depends(get_session)):
++    wallet = session.get(Wallet, user_id)
++    if wallet is None:
++        raise HTTPException(status_code=404, detail="User not found")
++    wallet.is_suspended = True
++    session.add(wallet)
++    session.commit()
++    session.refresh(wallet)
++    return wallet
++
++
++@router.post("/users/{user_id}/unsuspend", response_model=AdminUserRead)
++def unsuspend_user(user_id: uuid.UUID, session: Session = Depends(get_session)):
++    wallet = session.get(Wallet, user_id)
++    if wallet is None:
++        raise HTTPException(status_code=404, detail="User not found")
++    wallet.is_suspended = False
++    session.add(wallet)
++    session.commit()
++    session.refresh(wallet)
++    return wallet
++
++
++@router.post("/users/{user_id}/toggle-admin", response_model=AdminUserRead)
++def toggle_admin(
++    user_id: uuid.UUID,
++    admin: CurrentUser = Depends(require_admin),
++    session: Session = Depends(get_session),
++):
++    wallet = session.get(Wallet, user_id)
++    if wallet is None:
++        raise HTTPException(status_code=404, detail="User not found")
++    if str(wallet.user_id) == str(admin.id):
++        raise HTTPException(status_code=400, detail="You can't change your own admin status here.")
++    wallet.is_admin = not wallet.is_admin
++    session.add(wallet)
++    session.commit()
++    session.refresh(wallet)
++    return wallet
++
++
++# ---------- Orders (all users) ----------
++
++
++@router.get("/orders", response_model=list[AdminOrderRead])
++def list_all_orders(
++    status_filter: Optional[str] = Query(default=None, alias="status"),
++    limit: int = Query(default=50, le=200),
++    offset: int = 0,
++    session: Session = Depends(get_session),
++):
++    stmt = select(Order).order_by(Order.created_at.desc())
++    if status_filter:
++        stmt = stmt.where(Order.status == status_filter)
++    stmt = stmt.offset(offset).limit(limit)
++    orders = session.exec(stmt).all()
++
++    # Cheap N+1 avoidance: one extra query to map user_id -> email.
++    user_ids = {o.user_id for o in orders}
++    emails = {}
++    if user_ids:
++        wallets = session.exec(select(Wallet).where(Wallet.user_id.in_(user_ids))).all()
++        emails = {w.user_id: w.email for w in wallets}
++
++    return [
++        AdminOrderRead(**OrderRead.model_validate(o).model_dump(), user_id=o.user_id, user_email=emails.get(o.user_id))
++        for o in orders
++    ]
++
++
++# ---------- Stats ----------
++
++
++@router.get("/stats", response_model=AdminStatsRead)
++def get_stats(session: Session = Depends(get_session)):
++    total_users = session.exec(select(func.count()).select_from(Wallet)).one()
++    total_orders = session.exec(select(func.count()).select_from(Order)).one()
++    orders_pending = session.exec(select(func.count()).select_from(Order).where(Order.status == "pending")).one()
++    orders_received = session.exec(select(func.count()).select_from(Order).where(Order.status == "received")).one()
++    total_wallet_balance = session.exec(select(func.coalesce(func.sum(Wallet.wallet_balance_ngn), 0.0))).one()
++
++    revenue = session.exec(
++        select(func.coalesce(func.sum(LedgerEntry.amount_ngn), 0.0)).where(LedgerEntry.reason == "order_charge")
++    ).one()
++    topups = session.exec(
++        select(func.coalesce(func.sum(LedgerEntry.amount_ngn), 0.0)).where(
++            LedgerEntry.reason.in_(["topup_korapay", "topup_dev"])
++        )
++    ).one()
++
++    return AdminStatsRead(
++        total_users=total_users,
++        total_orders=total_orders,
++        orders_pending=orders_pending,
++        orders_received=orders_received,
++        total_wallet_balance_ngn=total_wallet_balance,
++        total_revenue_ngn=abs(revenue),  # order_charge entries are stored negative
++        total_topups_ngn=topups,
++    )
+diff --git a/sms-reseller/app/routers/auth.py b/sms-reseller/app/routers/auth.py
+index 25211db..7bf81dd 100644
+--- a/sms-reseller/app/routers/auth.py
++++ b/sms-reseller/app/routers/auth.py
+@@ -16,4 +16,4 @@ router = APIRouter(prefix="/auth", tags=["auth"])
+ 
+ @router.get("/me", response_model=UserRead)
+ def read_current_user(user: CurrentUser = Depends(get_current_user)):
+-    return UserRead(id=user.id, email=user.email, wallet_balance_ngn=user.wallet_balance_ngn)
++    return UserRead(id=user.id, email=user.email, wallet_balance_ngn=user.wallet_balance_ngn, is_admin=user.is_admin)
+diff --git a/sms-reseller/app/routers/settings.py b/sms-reseller/app/routers/settings.py
+new file mode 100644
+index 0000000..11dafde
+--- /dev/null
++++ b/sms-reseller/app/routers/settings.py
+@@ -0,0 +1,25 @@
++from fastapi import APIRouter, Depends
++from sqlmodel import Session, select
++
++from app.database import get_session
++from app.models import SiteSetting
++from app.schemas import SiteSettingsRead
++
++router = APIRouter(prefix="/settings", tags=["settings"])
++
++DEFAULTS = {
++    "whatsapp_group_url": "https://chat.whatsapp.com/LamcXmaQlk7AOfGBFIoLuq",
++    "telegram_url": "https://t.me/swiftverifyng",
++    "support_ticket_url": "https://t.me/SwiftVerifyNGcc",
++    "support_email": "",
++    "support_phone": "",
++    "announcement": "",
++}
++
++
++@router.get("", response_model=SiteSettingsRead)
++def get_public_settings(session: Session = Depends(get_session)):
++    """No auth required — these are the links/contacts shown in the app nav."""
++    rows = session.exec(select(SiteSetting)).all()
++    values = {**DEFAULTS, **{r.key: r.value for r in rows}}
++    return SiteSettingsRead(**values)
+diff --git a/sms-reseller/app/schemas.py b/sms-reseller/app/schemas.py
+index 6c12857..0709369 100644
+--- a/sms-reseller/app/schemas.py
++++ b/sms-reseller/app/schemas.py
+@@ -11,6 +11,7 @@ class UserRead(SQLModel):
+     id: uuid.UUID
+     email: str
+     wallet_balance_ngn: float
++    is_admin: bool = False
+ 
+ 
+ class OrderRead(SQLModel):
+@@ -34,3 +35,44 @@ class LedgerEntryRead(SQLModel):
+     order_id: Optional[int] = None
+     balance_after_ngn: float
+     created_at: datetime
++
++
++# ---------- Admin ----------
++
++
++class AdminUserRead(SQLModel):
++    user_id: uuid.UUID
++    email: Optional[str] = None
++    wallet_balance_ngn: float
++    is_admin: bool
++    is_suspended: bool
++    created_at: datetime
++
++
++class WalletAdjustRequest(SQLModel):
++    amount_ngn: float  # positive = credit, negative = debit
++    reason: str
++
++
++class AdminOrderRead(OrderRead):
++    user_id: uuid.UUID
++    user_email: Optional[str] = None
++
++
++class SiteSettingsRead(SQLModel):
++    whatsapp_group_url: str = ""
++    telegram_url: str = ""
++    support_ticket_url: str = ""
++    support_email: str = ""
++    support_phone: str = ""
++    announcement: str = ""
++
++
++class AdminStatsRead(SQLModel):
++    total_users: int
++    total_orders: int
++    orders_pending: int
++    orders_received: int
++    total_wallet_balance_ngn: float
++    total_revenue_ngn: float  # sum of order_charge ledger entries (negative -> flipped positive)
++    total_topups_ngn: float
+diff --git a/sms-reseller/supabase_schema.sql b/sms-reseller/supabase_schema.sql
+index 5caafce..602c78e 100644
+--- a/sms-reseller/supabase_schema.sql
++++ b/sms-reseller/supabase_schema.sql
+@@ -15,10 +15,18 @@ create extension if not exists "pgcrypto";
+ -- below; the backend never inserts a row here directly on signup.
+ create table if not exists public.wallets (
+   user_id uuid primary key references auth.users (id) on delete cascade,
++  email text,
+   wallet_balance_ngn numeric(14, 2) not null default 0,
++  is_admin boolean not null default false,
++  is_suspended boolean not null default false,
+   created_at timestamptz not null default now()
+ );
+ 
++-- Safe to re-run on an existing database that predates these columns.
++alter table public.wallets add column if not exists email text;
++alter table public.wallets add column if not exists is_admin boolean not null default false;
++alter table public.wallets add column if not exists is_suspended boolean not null default false;
++
+ alter table public.wallets enable row level security;
+ 
+ -- Only relevant if you ever query these tables directly from the frontend
+@@ -109,6 +117,21 @@ create policy "Users can view their own payments"
+   on public.pending_payments for select
+   using (auth.uid() = user_id);
+ 
++-- ---------- site_settings ----------
++-- Key/value store the admin panel writes to (WhatsApp group link, Telegram
++-- channel, support contact, etc). No RLS policies granting access here on
++-- purpose — the backend reads/writes it via its direct Postgres connection
++-- (not subject to RLS), and it's not meant to be queried from the frontend
++-- via supabase-js. Public reads go through GET /settings on the backend,
++-- which applies its own defaults for any key not yet set.
++create table if not exists public.site_settings (
++  key text primary key,
++  value text not null default '',
++  updated_at timestamptz not null default now()
++);
++
++alter table public.site_settings enable row level security;
++
+ -- ---------- auto-create wallet on signup ----------
+ -- Fires whenever Supabase Auth creates a new row in auth.users (i.e. right
+ -- after someone signs up). This is what replaces the old /auth/register
+@@ -119,8 +142,8 @@ language plpgsql
+ security definer set search_path = public
+ as $$
+ begin
+-  insert into public.wallets (user_id, wallet_balance_ngn)
+-  values (new.id, 0);
++  insert into public.wallets (user_id, email, wallet_balance_ngn)
++  values (new.id, new.email, 0);
+   return new;
+ end;
+ $$;

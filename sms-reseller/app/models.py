@@ -21,17 +21,35 @@ class Wallet(SQLModel, table=True):
     """
     Replaces the old User table. Auth itself now lives entirely in
     Supabase's own auth.users table (managed by Supabase, not this app) —
-    this table exists only to hold the one thing our app actually owns:
-    the wallet balance. `user_id` is the Supabase Auth user's UUID, and a
-    row here is created automatically by a Postgres trigger the moment
-    someone signs up (see supabase_schema.sql) — the backend never inserts
-    a row here itself.
+    this table exists only to hold the things our app actually owns:
+    wallet balance, admin/suspension flags, and a cached copy of the email
+    (handy for the admin panel without needing the Supabase service-role
+    API). `user_id` is the Supabase Auth user's UUID, and a row here is
+    created automatically by a Postgres trigger the moment someone signs up
+    (see supabase_schema.sql) — the backend never inserts a row here itself
+    except as a local-dev/SQLite fallback (see get_or_create_wallet).
     """
     __tablename__ = "wallets"
 
     user_id: uuid.UUID = Field(primary_key=True)
+    email: Optional[str] = None
     wallet_balance_ngn: float = 0.0
+    is_admin: bool = False
+    is_suspended: bool = False
     created_at: datetime = Field(default_factory=utcnow)
+
+
+class SiteSetting(SQLModel, table=True):
+    """
+    Simple key/value store for things the admin panel lets you edit without
+    a redeploy — WhatsApp group link, Telegram channel, support contact,
+    etc. Read publicly via GET /settings, written only via the admin router.
+    """
+    __tablename__ = "site_settings"
+
+    key: str = Field(primary_key=True)
+    value: str = ""
+    updated_at: datetime = Field(default_factory=utcnow)
 
 
 class LedgerEntry(SQLModel, table=True):

@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import init_db
-from app.routers import auth, orders, payments, wallet
+from app.routers import admin, auth, orders, payments, settings, wallet
 
 app = FastAPI(title="SMS Reseller API", version="0.1.0")
 
@@ -27,6 +27,8 @@ app.include_router(auth.router)
 app.include_router(wallet.router)
 app.include_router(orders.router)
 app.include_router(payments.router)
+app.include_router(settings.router)
+app.include_router(admin.router)
 
 
 @app.get("/")

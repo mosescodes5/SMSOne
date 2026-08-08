@@ -14,9 +14,16 @@ class Settings(BaseSettings):
     supabase_url: str = ""
     supabase_jwt_secret: str = ""  # Settings -> API -> JWT Secret (HS256 projects)
 
-    provider: str = "mock"  # fivesim | smsactivate | smsman | mock
+    provider: str = "mock"  # fivesim | smsman | smsactivate | mock
     provider_api_key: str = ""
     provider_base_url: str = ""
+
+    # Comma-separated emails that are always treated as admin, regardless of
+    # the `is_admin` DB flag — this is how you bootstrap your very first
+    # admin account (yourself) without needing an admin panel to already
+    # exist. Once you're in, you can grant/revoke `is_admin` on other
+    # accounts from the panel itself.
+    admin_emails: str = ""
 
     usd_ngn_rate: float = 1600.0
 

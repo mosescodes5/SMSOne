@@ -258,7 +258,7 @@ function AuthScreen() {
 
 // ---------- Dashboard shell ----------
 
-const NAV_SECTIONS = [
+const NAV_SECTIONS_BASE = [
   {
     heading: null,
     items: [
@@ -280,13 +280,6 @@ const NAV_SECTIONS = [
       { id: "settings", label: "Settings" },
     ],
   },
-  {
-    heading: "Community",
-    items: [
-      { id: "support", label: "Support", external: "https://t.me/SwiftVerifyNGcc" },
-      { id: "telegram", label: "Telegram News", external: "https://t.me/swiftverifyng" },
-    ],
-  },
 ];
 
 function DashboardShell() {
@@ -294,6 +287,8 @@ function DashboardShell() {
   const [balance, setBalance] = useState(null);
   const [topupOpen, setTopupOpen] = useState(false);
   const [navOpen, setNavOpen] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [siteSettings, setSiteSettings] = useState(null);
 
   const refreshBalance = useCallback(async () => {
     try {
@@ -312,7 +307,20 @@ function DashboardShell() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     refreshBalance();
+    api.getMyProfile().then((p) => setIsAdmin(!!p.is_admin)).catch(() => {});
+    api.getPublicSettings().then(setSiteSettings).catch(() => {});
   }, [refreshBalance]);
+
+  const NAV_SECTIONS = [
+    ...NAV_SECTIONS_BASE,
+    {
+      heading: "Community",
+      items: [
+        { id: "support", label: "Support", external: siteSettings?.support_ticket_url || "https://t.me/SwiftVerifyNGcc" },
+        { id: "telegram", label: "Telegram News", external: siteSettings?.telegram_url || "https://t.me/swiftverifyng" },
+      ],
+    },
+  ];
 
   function handleLogout() {
     api.logout();
@@ -386,6 +394,14 @@ function DashboardShell() {
           ))}
         </nav>
 
+        {isAdmin && (
+          <Link
+            href="/admin"
+            className="text-left px-3 py-2.5 rounded-lg text-[0.9rem] font-semibold text-signal border border-signal-soft bg-signal-soft hover:brightness-105 transition-colors text-center md:text-left"
+          >
+            Admin panel
+          </Link>
+        )}
         <Button variant="ghost" onClick={handleLogout} className="w-auto md:w-full">
           Log out
         </Button>

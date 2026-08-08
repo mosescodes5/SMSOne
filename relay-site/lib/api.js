@@ -38,6 +38,9 @@ export async function getCurrentUser() {
   return data.user;
 }
 
+/** Backend /auth/me — includes is_admin, unlike the raw Supabase user object. */
+export const getMyProfile = () => api("/auth/me");
+
 export async function changePassword(newPassword) {
   const { error } = await supabase.auth.updateUser({ password: newPassword });
   if (error) throw new Error(error.message);
@@ -82,6 +85,34 @@ async function api(path, { method = "GET", auth = true } = {}) {
   return data;
 }
 
+/** Like `api`, but sends a JSON body — for endpoints that take a request
+ *  payload (e.g. admin actions) instead of query params. */
+async function apiWithBody(path, { method = "POST", body, auth = true } = {}) {
+  const headers = { "Content-Type": "application/json" };
+  if (auth) {
+    const token = await getAccessToken();
+    if (!token) throw new Error("Not logged in");
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+
+  const res = await fetch(`${API_BASE}${path}`, {
+    method,
+    headers,
+    body: JSON.stringify(body),
+  });
+  let data = null;
+  try {
+    data = await res.json();
+  } catch (_) {
+    /* no body */
+  }
+  if (!res.ok) {
+    const detail = data?.detail || res.statusText;
+    throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
+  }
+  return data;
+}
+
 // ---------- Wallet ----------
 
 export const getBalance = () => api("/wallet/balance");
@@ -110,3 +141,31 @@ export const initializeTopup = (amountNgn) =>
   api(`/payments/korapay/initialize?${qs({ amount_ngn: amountNgn })}`, {
     method: "POST",
   });
+
+// ---------- Public settings (WhatsApp/Telegram/support links) ----------
+
+export const getPublicSettings = () => api("/settings", { auth: false });
+
+// ---------- Admin ----------
+
+export const getAdminSettings = () => api("/admin/settings");
+export const updateAdminSettings = (settings) =>
+  apiWithBody("/admin/settings", { method: "PUT", body: settings });
+
+export const listAdminUsers = (q = "") =>
+  api(`/admin/users${q ? `?${qs({ q })}` : ""}`);
+
+export const adjustUserWallet = (userId, amountNgn, reason) =>
+  apiWithBody(`/admin/users/${userId}/adjust-wallet`, {
+    method: "POST",
+    body: { amount_ngn: amountNgn, reason },
+  });
+
+export const suspendUser = (userId) => api(`/admin/users/${userId}/suspend`, { method: "POST" });
+export const unsuspendUser = (userId) => api(`/admin/users/${userId}/unsuspend`, { method: "POST" });
+export const toggleUserAdmin = (userId) => api(`/admin/users/${userId}/toggle-admin`, { method: "POST" });
+
+export const listAdminOrders = (status) =>
+  api(`/admin/orders${status ? `?${qs({ status })}` : ""}`);
+
+export const getAdminStats = () => api("/admin/stats");

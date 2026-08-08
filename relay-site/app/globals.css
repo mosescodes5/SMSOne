@@ -1,0 +1,135 @@
+@import "tailwindcss";
+
+:root {
+  /* Base surfaces — warm charcoal-plum, not stock slate */
+  --bg: #14121B;
+  --bg-elevated: #1A1723;
+  --surface: #1C1926;
+  --surface-hover: #221F2E;
+  --line: rgba(255, 255, 255, 0.08);
+  --line-strong: rgba(255, 255, 255, 0.14);
+
+  /* Text */
+  --ink: #F3F1F7;
+  --ink-soft: #A9A3BD;
+  --ink-faint: #8B85A8;
+
+  /* Signal gradient — primary actions, replaces flat blue-600 */
+  --signal-from: #5B6EF5;
+  --signal-to: #9B6BFF;
+  --signal-solid: #6C7CF6;
+  --signal-soft: rgba(107, 110, 245, 0.14);
+
+  /* Status */
+  --mint: #34D8A6;
+  --mint-soft: rgba(52, 216, 166, 0.12);
+  --amber: #FFB74D;
+  --amber-soft: rgba(255, 183, 77, 0.12);
+  --red: #FF6B6B;
+  --red-soft: rgba(255, 107, 107, 0.12);
+
+  --shadow-soft: 0 1px 2px rgba(0,0,0,0.2), 0 12px 32px rgba(0,0,0,0.35);
+  --shadow-glow: 0 0 0 1px rgba(155,107,255,0.25), 0 8px 24px rgba(91,110,245,0.25);
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-bg-elevated: var(--bg-elevated);
+  --color-surface: var(--surface);
+  --color-surface-hover: var(--surface-hover);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-ink-faint: var(--ink-faint);
+
+  --color-signal: var(--signal-solid);
+  --color-signal-soft: var(--signal-soft);
+  --color-mint: var(--mint);
+  --color-mint-soft: var(--mint-soft);
+  --color-amber: var(--amber);
+  --color-amber-soft: var(--amber-soft);
+  --color-red: var(--red);
+  --color-red-soft: var(--red-soft);
+
+  --font-display: var(--font-space-grotesk);
+  --font-body: var(--font-inter);
+  --font-mono: var(--font-plex-mono);
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+}
+
+.text-gradient {
+  background: linear-gradient(100deg, var(--signal-from), var(--signal-to));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.gradient-signal {
+  background: linear-gradient(100deg, var(--signal-from), var(--signal-to));
+}
+
+.glass {
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--line);
+}
+
+::selection { background: var(--mint-soft); color: var(--mint); }
+
+a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible {
+  outline: 2px solid var(--signal-solid);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+
+/* Light mode override — same semantic tokens, lighter values.
+   Dark is the primary/default experience; light exists so the toggle
+   genuinely works, not left half-implemented. */
+.light {
+  --bg: #F5F3FA;
+  --bg-elevated: #FFFFFF;
+  --surface: #FFFFFF;
+  --surface-hover: #EEEBF5;
+  --line: rgba(20, 18, 27, 0.1);
+  --line-strong: rgba(20, 18, 27, 0.18);
+
+  --ink: #14121B;
+  --ink-soft: #55506B;
+  --ink-faint: #6B6584;
+
+  /* Text-bearing status colors need darker/more saturated variants here —
+     the dark-theme values (tuned to sit on a near-black bg) fail contrast
+     outright on a light bg (checked: mint 2.81:1, amber 1.57:1, red 2.52:1,
+     signal 3.26:1 — all below the 4.5:1 AA floor). These pass 4.8–5.2:1. */
+  --signal-solid: #4C57D6;
+  --mint: #0A7A5B;
+  --amber: #9C5D00;
+  --red: #C22F2F;
+
+  --signal-soft: rgba(76, 87, 214, 0.1);
+  --mint-soft: rgba(10, 122, 91, 0.1);
+  --amber-soft: rgba(156, 93, 0, 0.1);
+  --red-soft: rgba(194, 47, 47, 0.1);
+
+  --shadow-soft: 0 1px 2px rgba(20,18,27,0.04), 0 8px 24px rgba(20,18,27,0.06);
+  --shadow-glow: 0 4px 16px rgba(91,110,245,0.25);
+}

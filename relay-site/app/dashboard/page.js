@@ -456,6 +456,7 @@ function DashboardShell() {
     }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     refreshBalance();
 
     api
@@ -513,7 +514,7 @@ function DashboardShell() {
         <div className="flex items-center justify-between w-full md:w-auto">
           <div className="flex items-center gap-2 font-display font-bold text-[1.1rem]">
             <span className="w-2.5 h-2.5 rounded-full bg-mint" />
-            Relay
+            SMSOne
           </div>
 
           <button

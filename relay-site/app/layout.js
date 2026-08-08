@@ -21,7 +21,7 @@ const plexMono = IBM_Plex_Mono({
 });
 
 export const metadata = {
-  title: "Relay — Verification numbers, priced fairly",
+  title: "SMSOne — Verification numbers, priced fairly",
   description:
     "Rent a verification number and pay in naira. Charged only when your code arrives — auto-refunded otherwise.",
 };

@@ -12,10 +12,10 @@ const LINKS = [
 export default function SiteHeader() {
   return (
     <header className="sticky top-0 z-20 bg-[color-mix(in_srgb,var(--bg)_75%,transparent)] backdrop-blur-md border-b border-line">
-      <div className="max-w-[1120px] mx-auto px-6 flex items-center justify-between py-4">
+      <div className="max-w-[1320px] mx-auto px-6 flex items-center justify-between py-4">
         <Link href="/" className="flex items-center gap-2 font-display font-bold text-[1.15rem]">
           <span className="w-2.5 h-2.5 rounded-full bg-mint shadow-[0_0_10px_var(--mint)]" />
-          Relay
+          SMSOne
         </Link>
         <nav className="hidden md:flex items-center gap-7">
           {LINKS.map((l) => (

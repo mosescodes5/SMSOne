@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui";
 
 export const metadata = {
-  title: "Relay — Terms, Privacy & Refund Policy",
+  title: "SMSOne — Terms, Privacy & Refund Policy",
 };
 
 const NAV = [
@@ -37,10 +37,10 @@ export default function TermsPage() {
   return (
     <>
       <header className="sticky top-0 z-20 bg-[rgba(243,246,251,0.9)] backdrop-blur-sm border-b border-line">
-        <div className="max-w-[1120px] mx-auto px-6 flex items-center justify-between py-4">
+        <div className="max-w-[1320px] mx-auto px-6 flex items-center justify-between py-4">
           <Link href="/" className="flex items-center gap-2 font-display font-bold text-[1.1rem]">
             <span className="w-2.5 h-2.5 rounded-full bg-mint" />
-            Relay
+            SMSOne
           </Link>
           <Button as={Link} href="/" variant="ghost">
             Back to home
@@ -48,7 +48,7 @@ export default function TermsPage() {
         </div>
       </header>
 
-      <div className="max-w-[1120px] mx-auto px-6 grid md:grid-cols-[220px_1fr] gap-12 py-12 pb-24">
+      <div className="max-w-[1320px] mx-auto px-6 grid md:grid-cols-[220px_1fr] gap-12 py-12 pb-24">
         <nav className="hidden md:flex flex-col gap-1 sticky top-24 self-start">
           {NAV.map((item, i) =>
             item.group ? (
@@ -73,7 +73,7 @@ export default function TermsPage() {
         <div>
           <h1 className="text-[2rem] mb-2">Terms, Privacy &amp; Policies</h1>
           <p className="text-[0.85rem] text-ink-faint mb-10">
-            Last updated: [DATE] · Relay (&quot;we&quot;, &quot;us&quot;, &quot;our&quot;) is operated from Nigeria.
+            Last updated: [DATE] · SMSOne (&quot;we&quot;, &quot;us&quot;, &quot;our&quot;) is operated from Nigeria.
           </p>
 
           <div className="bg-amber-soft border-l-[3px] border-amber px-4.5 py-3.5 rounded-r-lg mb-8">
@@ -86,7 +86,7 @@ export default function TermsPage() {
 
           <Section id="acceptance" title="1. Acceptance of terms">
             <p>
-              By creating an account or using Relay (&quot;the Service&quot;), you agree to these Terms. If you
+              By creating an account or using SMSOne (&quot;the Service&quot;), you agree to these Terms. If you
               don&apos;t agree, don&apos;t use the Service. We may update these Terms from time to time — see{" "}
               <a href="#changes">Section 12</a>.
             </p>
@@ -94,7 +94,7 @@ export default function TermsPage() {
 
           <Section id="service" title="2. What the Service does">
             <p>
-              Relay provides temporary virtual phone numbers for the purpose of receiving one-time SMS
+              SMSOne provides temporary virtual phone numbers for the purpose of receiving one-time SMS
               verification codes (&quot;OTPs&quot;) from third-party platforms. You fund a wallet in Nigerian
               Naira (₦), select a service and country, and are assigned a number. If an SMS arrives within
               the order window, your wallet is charged the listed price. If nothing arrives before the order
@@ -102,7 +102,7 @@ export default function TermsPage() {
             </p>
             <h3>2.1 Not affiliated with third-party platforms</h3>
             <p>
-              Relay is not affiliated with, endorsed by, or connected to WhatsApp, Google, Facebook, Telegram,
+              SMSOne is not affiliated with, endorsed by, or connected to WhatsApp, Google, Facebook, Telegram,
               or any other platform referenced on this site. Those names are used only to describe which
               services a number can be used to verify.
             </p>
@@ -120,8 +120,8 @@ export default function TermsPage() {
           <Section id="acceptable-use" title="4. Acceptable use">
             <p>You agree to use the Service only for lawful purposes. Without limiting the above, you agree not to:</p>
             <ul>
-              <li>Use Relay to facilitate fraud, harassment, spam, or any illegal activity;</li>
-              <li>Use Relay in a way that violates the terms of service of the platform you&apos;re verifying with — compliance with those third-party terms is your responsibility, not ours;</li>
+              <li>Use SMSOne to facilitate fraud, harassment, spam, or any illegal activity;</li>
+              <li>Use SMSOne in a way that violates the terms of service of the platform you&apos;re verifying with — compliance with those third-party terms is your responsibility, not ours;</li>
               <li>Attempt to resell, automate abuse of, or circumvent rate limits on the Service outside of any officially provided API access;</li>
               <li>Use another person&apos;s payment details or identity without authorization.</li>
             </ul>
@@ -133,7 +133,7 @@ export default function TermsPage() {
 
           <Section id="payments" title="5. Payments">
             <p>
-              Wallet top-ups are processed by Korapay, a third-party licensed payment processor. Relay does
+              Wallet top-ups are processed by Korapay, a third-party licensed payment processor. SMSOne does
               not store your card or bank details — that information is handled entirely by Korapay under
               its own security standards and terms. We only receive confirmation that a payment succeeded
               and the amount paid.
@@ -181,7 +181,7 @@ export default function TermsPage() {
 
           <Section id="liability" title="8. Limitation of liability">
             <p>
-              The Service is provided &quot;as is.&quot; To the fullest extent permitted by Nigerian law, Relay
+              The Service is provided &quot;as is.&quot; To the fullest extent permitted by Nigerian law, SMSOne
               is not liable for indirect, incidental, or consequential damages arising from use of the
               Service, including account restrictions imposed by third-party platforms as a result of using
               a virtual number. Our total liability for any claim is limited to the amount you paid us in

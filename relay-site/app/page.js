@@ -64,8 +64,9 @@ export default function LandingPage() {
 
       <main>
         {/* Hero */}
-        <section className="relative max-w-[1120px] mx-auto px-6 pt-16 pb-16 md:pt-24 md:pb-20">
+        <section className="relative overflow-hidden">
           <GradientMesh />
+          <div className="max-w-[1320px] mx-auto px-6 pt-16 pb-16 md:pt-24 md:pb-20">
           <HeroEntrance>
             <div className="grid md:grid-cols-[1.1fr_0.9fr] gap-14 items-center">
               <div>
@@ -76,7 +77,7 @@ export default function LandingPage() {
                   Verification numbers that <span className="text-gradient">arrive</span>, priced like they should be.
                 </h1>
                 <p className="text-[1.1rem] text-ink-soft max-w-[46ch] mb-8 leading-relaxed">
-                  Rent a number, get your code, done. Relay charges only when a code actually lands — no waiting on shared inboxes, no guessing what you&apos;ll pay.
+                  Rent a number, get your code, done. SMSOne charges only when a code actually lands — no waiting on shared inboxes, no guessing what you&apos;ll pay.
                 </p>
                 <div className="flex gap-3 mb-9 flex-wrap">
                   <Button as={Link} href="/dashboard?signup=1" variant="primary">
@@ -109,10 +110,11 @@ export default function LandingPage() {
               </div>
             </div>
           </HeroEntrance>
+          </div>
         </section>
 
         {/* How it works */}
-        <section id="how" className="max-w-[1120px] mx-auto px-6 py-16">
+        <section id="how" className="max-w-[1320px] mx-auto px-6 py-16">
           <Reveal className="max-w-[60ch] mb-11">
             <span className="block text-[0.8rem] font-bold text-signal uppercase tracking-wider mb-2.5">
               How it works
@@ -133,7 +135,7 @@ export default function LandingPage() {
         </section>
 
         {/* Pricing */}
-        <section id="pricing" className="max-w-[1120px] mx-auto px-6 py-16">
+        <section id="pricing" className="max-w-[1320px] mx-auto px-6 py-16">
           <Reveal className="max-w-[60ch] mb-11">
             <span className="block text-[0.8rem] font-bold text-signal uppercase tracking-wider mb-2.5">
               Pricing
@@ -167,10 +169,10 @@ export default function LandingPage() {
         </section>
 
         {/* Compare */}
-        <section id="compare" className="max-w-[1120px] mx-auto px-6 py-16">
+        <section id="compare" className="max-w-[1320px] mx-auto px-6 py-16">
           <Reveal className="max-w-[60ch] mb-11">
             <span className="block text-[0.8rem] font-bold text-signal uppercase tracking-wider mb-2.5">
-              Why Relay
+              Why SMSOne
             </span>
             <h2 className="text-[clamp(1.7rem,3vw,2.3rem)] mb-3">
               Built around the moments that actually cost you money
@@ -201,7 +203,7 @@ export default function LandingPage() {
         </section>
 
         {/* FAQ */}
-        <section id="faq" className="max-w-[1120px] mx-auto px-6 py-16">
+        <section id="faq" className="max-w-[1320px] mx-auto px-6 py-16">
           <Reveal className="max-w-[60ch] mb-11">
             <span className="block text-[0.8rem] font-bold text-signal uppercase tracking-wider mb-2.5">
               FAQ
@@ -225,7 +227,7 @@ export default function LandingPage() {
         </section>
 
         {/* Contact */}
-        <section id="contact" className="max-w-[1120px] mx-auto px-6 py-16">
+        <section id="contact" className="max-w-[1320px] mx-auto px-6 py-16">
           <Reveal className="max-w-[60ch] mb-11">
             <span className="block text-[0.8rem] font-bold text-signal uppercase tracking-wider mb-2.5">
               Contact

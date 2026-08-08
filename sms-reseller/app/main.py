@@ -2,13 +2,25 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import init_db
-from app.routers import admin, auth, orders, payments, settings, wallet
+from app.routers import (
+    admin,
+    auth,
+    orders,
+    payments,
+    providers,
+    settings,
+    wallet,
+)
 
-app = FastAPI(title="SMS Reseller API", version="0.1.0")
 
-# Dev-permissive CORS so the static frontend (served from file:// or any local
-# port) can call this API. Before deploying, replace allow_origins with your
-# actual frontend domain(s).
+app = FastAPI(
+    title="SMS Reseller API",
+    version="0.1.0",
+)
+
+
+# Development CORS.
+# Before production, replace "*" with your actual frontend domain.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -29,8 +41,12 @@ app.include_router(orders.router)
 app.include_router(payments.router)
 app.include_router(settings.router)
 app.include_router(admin.router)
+app.include_router(providers.router)
 
 
 @app.get("/")
 def root():
-    return {"status": "ok", "service": "sms-reseller-api"}
+    return {
+        "status": "ok",
+        "service": "sms-reseller-api",
+    }

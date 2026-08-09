@@ -40,7 +40,7 @@ class SmsManProvider(SMSProvider):
         except (KeyError, ValueError, TypeError):
             raise LookupError(f"No price found for {service}/{country}")
 
-    async def reserve_number(self, service: str, country: str) -> ReservedNumber:
+    async def reserve_number(self, service: str, country: str, operator: str = "any") -> ReservedNumber:
         url = f"{BASE_URL}/get-number"
         params = {**self._params, "country_id": country, "application_id": service}
         async with httpx.AsyncClient() as client:

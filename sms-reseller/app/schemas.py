@@ -28,6 +28,14 @@ class OrderRead(SQLModel):
     completed_at: Optional[datetime] = None
 
 
+class OfferRead(SQLModel):
+    """One purchasable pool for a service+country — what the buy screen lists."""
+    operator: str
+    price_ngn: float
+    success_rate: Optional[float] = None  # 0-100
+    available: Optional[int] = None
+
+
 class LedgerEntryRead(SQLModel):
     id: int
     amount_ngn: float
@@ -68,11 +76,16 @@ class SiteSettingsRead(SQLModel):
     announcement: str = ""
 
 
-class PricingSettingsRead(SQLModel):
-    usd_ngn_rate: float
+class PricingTier(SQLModel):
+    max_cost_ngn: Optional[float] = None  # None = catch-all (applies above all other tiers)
     markup_percent: float
     markup_flat_ngn: float
+
+
+class PricingSettingsRead(SQLModel):
+    usd_ngn_rate: float
     min_price_ngn: float
+    tiers: list[PricingTier]
 
 
 class AdminStatsRead(SQLModel):

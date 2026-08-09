@@ -24,7 +24,7 @@ class MockProvider(SMSProvider):
     async def get_price_usd(self, service: str, country: str) -> float:
         return _MOCK_PRICES.get((service.lower(), country.lower()), _DEFAULT_PRICE)
 
-    async def reserve_number(self, service: str, country: str) -> ReservedNumber:
+    async def reserve_number(self, service: str, country: str, operator: str = "any") -> ReservedNumber:
         order_id = str(uuid.uuid4())
         fake_number = "+234" + "".join(random.choices(string.digits, k=10))
         _PENDING[order_id] = random.randint(2, 5)  # arrives after a few polls

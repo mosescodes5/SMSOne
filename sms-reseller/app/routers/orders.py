@@ -99,6 +99,7 @@ async def buy_number(
     request: Request,
     service: str,
     country: str,
+    operator: str = "any",
     user: CurrentUser = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
@@ -127,6 +128,7 @@ async def buy_number(
         reserved = await provider.reserve_number(
             service,
             country,
+            operator=(operator or "any").strip().lower(),
         )
 
     except LookupError as exc:

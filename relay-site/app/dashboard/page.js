@@ -705,10 +705,11 @@ function BuyView({
   const [providerError, setProviderError] =
     useState(null);
 
-  const [priceState, setPriceState] =
+  const [offersState, setOffersState] =
     useState({
-      price: null,
+      loading: false,
       error: null,
+      offers: null, // null = not checked yet
     });
 
   const [order, setOrder] =
@@ -716,6 +717,9 @@ function BuyView({
 
   const [buying, setBuying] =
     useState(false);
+
+  const [buyingOperator, setBuyingOperator] =
+    useState(null);
 
   const [buyError, setBuyError] =
     useState(null);
@@ -911,10 +915,7 @@ function BuyView({
     setServices([]);
     setService("");
 
-    setPriceState({
-      price: null,
-      error: null,
-    });
+    setOffersState({ loading: false, error: null, offers: null });
 
     setProviderError(null);
     setBuyError(null);
@@ -927,31 +928,56 @@ function BuyView({
   function handleServiceChange(e) {
     setService(e.target.value);
 
-    setPriceState({
-      price: null,
-      error: null,
-    });
+    setOffersState({ loading: false, error: null, offers: null });
 
     setBuyError(null);
+  }
+
+  // ----------------------------------------------------------
+  // CHECK AVAILABILITY
+  // ----------------------------------------------------------
+
+  async function handleCheckAvailability() {
+    if (!country || !service) return;
+
+    setOffersState({ loading: true, error: null, offers: null });
+    setBuyError(null);
+
+    try {
+      const offers = await api.getOffers(service, country);
+      setOffersState({
+        loading: false,
+        error: offers.length === 0 ? "No numbers currently available for this service." : null,
+        offers,
+      });
+    } catch (err) {
+      setOffersState({
+        loading: false,
+        error: err.message || "No numbers currently available for this service.",
+        offers: null,
+      });
+    }
   }
 
   // ----------------------------------------------------------
   // BUY
   // ----------------------------------------------------------
 
-  async function handleBuy() {
+  async function handleBuy(operator) {
     if (!country || !service) {
       return;
     }
 
     setBuying(true);
+    setBuyingOperator(operator);
     setBuyError(null);
 
     try {
       const newOrder =
         await api.buyNumber(
           service,
-          country
+          country,
+          operator
         );
 
       setOrder(newOrder);
@@ -964,6 +990,7 @@ function BuyView({
       );
     } finally {
       setBuying(false);
+      setBuyingOperator(null);
     }
   }
 
@@ -1138,40 +1165,28 @@ function BuyView({
           </div>
         )}
 
-        {/* PRICE */}
-
-        <div className="text-[0.9rem] text-ink-soft my-3.5">
-          {service && country ? (
-            <PricePreview
-              key={`${service}-${country}`}
-              service={service}
-              country={country}
-              onChange={setPriceState}
-            />
-          ) : (
-            "Select a country and service to see the price."
-          )}
-        </div>
-
-        {/* RESERVE */}
+        {/* CHECK AVAILABILITY */}
 
         <Button
           variant="primary"
           className="w-full"
-          onClick={handleBuy}
+          onClick={handleCheckAvailability}
           disabled={
-            buying ||
+            offersState.loading ||
             !country ||
             !service ||
-            !!priceState.error ||
             loadingCountries ||
             loadingServices
           }
         >
-          {buying
-            ? "Reserving…"
-            : "Reserve number"}
+          {offersState.loading ? "Checking…" : "Check Availability"}
         </Button>
+
+        {offersState.error && (
+          <div className="bg-red-soft text-red text-[0.85rem] px-3 py-2.5 rounded-lg mt-3.5">
+            {offersState.error}
+          </div>
+        )}
 
         {buyError && (
           <div className="bg-red-soft text-red text-[0.85rem] px-3 py-2.5 rounded-lg mt-3.5">
@@ -1179,6 +1194,25 @@ function BuyView({
           </div>
         )}
       </Card>
+
+      {/* AVAILABLE NUMBERS */}
+
+      {offersState.offers && offersState.offers.length > 0 && (
+        <Card>
+          <h3 className="text-[1.1rem] mb-4">Available Numbers</h3>
+          <div className="flex flex-col gap-3">
+            {offersState.offers.map((offer) => (
+              <OfferCard
+                key={offer.operator}
+                offer={offer}
+                buying={buying && buyingOperator === offer.operator}
+                disabled={buying}
+                onReserve={() => handleBuy(offer.operator)}
+              />
+            ))}
+          </div>
+        </Card>
+      )}
 
       {/* ORDER */}
 
@@ -1244,74 +1278,40 @@ function BuyView({
 }
 
 // ============================================================
-// PRICE
+// OFFER CARD (a single reservable pool/operator)
 // ============================================================
 
-function PricePreview({
-  service,
-  country,
-  onChange,
-}) {
-  const [price, setPrice] =
-    useState(null);
+function formatOperatorLabel(operator) {
+  if (!operator || operator === "any") return "Standard";
+  return operator
+    .replace(/[_-]/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
 
-  const [error, setError] =
-    useState(null);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    api
-      .previewPrice(
-        service,
-        country
-      )
-      .then((data) => {
-        if (cancelled) return;
-
-        setPrice(data.price_ngn);
-
-        onChange({
-          price: data.price_ngn,
-          error: null,
-        });
-      })
-      .catch(() => {
-        if (cancelled) return;
-
-        const msg =
-          "No numbers currently available for this service.";
-
-        setError(msg);
-
-        onChange({
-          price: null,
-          error: msg,
-        });
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    service,
-    country,
-    onChange,
-  ]);
-
-  if (error) return error;
-
-  if (price === null) {
-    return "Checking price…";
-  }
+function OfferCard({ offer, buying, disabled, onReserve }) {
+  const rate = offer.success_rate;
+  const rateTone = rate == null ? "neutral" : rate >= 70 ? "mint" : rate >= 40 ? "amber" : "red";
 
   return (
-    <>
-      Price:{" "}
-      <strong className="text-ink font-mono">
-        {formatNgn(price)}
-      </strong>
-    </>
+    <div className="border border-line rounded-xl p-4 flex items-center justify-between gap-4 flex-wrap">
+      <div>
+        <div className="font-semibold text-[0.95rem] mb-1">{formatOperatorLabel(offer.operator)}</div>
+        <div className="flex items-center gap-3 text-[0.82rem] text-ink-soft flex-wrap">
+          <span>
+            Price <strong className="font-mono text-ink">{formatNgn(offer.price_ngn)}</strong>
+          </span>
+          {rate != null && (
+            <Pill tone={rateTone}>{Math.round(rate)}% success rate</Pill>
+          )}
+          {offer.available != null && (
+            <span className="text-ink-faint">{offer.available} available</span>
+          )}
+        </div>
+      </div>
+      <Button variant="mint" onClick={onReserve} disabled={disabled}>
+        {buying ? "Reserving…" : "Reserve"}
+      </Button>
+    </div>
   );
 }
 

@@ -253,14 +253,35 @@ export const previewPrice = (
     }
   );
 
-export const buyNumber = (
+/**
+ * Every currently-stocked pool for a service+country, each with its own
+ * price and (when 5SIM reports one) success rate — powers the multi-card
+ * "pick your number" screen instead of a single buy button.
+ */
+export const getOffers = (
   service,
   country
+) =>
+  api(
+    `/providers/offers?${qs({
+      service,
+      country,
+    })}`,
+    {
+      auth: false,
+    }
+  );
+
+export const buyNumber = (
+  service,
+  country,
+  operator = "any"
 ) =>
   api(
     `/orders?${qs({
       service,
       country,
+      operator,
     })}`,
     {
       method: "POST",

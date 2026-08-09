@@ -12,7 +12,7 @@ from typing import Optional
 import httpx
 
 from app.config import settings
-from app.providers.base import SMSProvider, ReservedNumber
+from app.providers.base import SMSProvider, ReservedNumber, Offer
 
 
 BASE_URL = settings.provider_base_url.rstrip("/")
@@ -131,6 +131,62 @@ class FiveSimProvider(SMSProvider):
 
         return services
 
+    async def list_offers(
+        self,
+        service: str,
+        country: str,
+    ) -> list[Offer]:
+        """
+        Every currently-stocked operator/pool for this service+country, each
+        with its own price and success rate — this is what lets the buy
+        screen show several options (Classic/Global/Select/etc in 5SIM's own
+        dashboard language) instead of just the cheapest one. 5SIM's `rate`
+        field is a 0-100 historical success percentage for that pool.
+        """
+        service = service.strip().lower()
+        country = country.strip().lower()
+
+        url = f"{BASE_URL}/guest/prices"
+        params = {"country": country, "product": service}
+
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            response = await client.get(url, params=params, headers={"Accept": "application/json"})
+
+        if response.status_code != 200:
+            raise LookupError(f"No numbers available for {service}/{country}: {response.text}")
+
+        data = response.json()
+
+        try:
+            product_data = data[country][service]
+        except (KeyError, TypeError):
+            raise LookupError(f"No numbers available for {service}/{country}")
+
+        offers = []
+        for operator_name, operator_data in product_data.items():
+            count = int(operator_data.get("count", 0) or 0)
+            if count <= 0:
+                continue
+            try:
+                cost = float(operator_data["cost"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            rate = operator_data.get("rate")
+            offers.append(
+                Offer(
+                    operator=operator_name,
+                    cost_usd=cost,
+                    success_rate=float(rate) if rate is not None else None,
+                    available=count,
+                )
+            )
+
+        if not offers:
+            raise LookupError(f"No numbers available for {service}/{country}")
+
+        offers.sort(key=lambda o: o.cost_usd)
+        return offers
+
     async def get_price_usd(
         self,
         service: str,
@@ -140,67 +196,26 @@ class FiveSimProvider(SMSProvider):
         Get the cheapest currently available price
         for a service/country combination.
         """
-        service = service.strip().lower()
-        country = country.strip().lower()
-
-        url = f"{BASE_URL}/guest/prices"
-
-        params = {
-            "country": country,
-            "product": service,
-        }
-
-        async with httpx.AsyncClient(timeout=20.0) as client:
-            response = await client.get(
-                url,
-                params=params,
-                headers={"Accept": "application/json"},
-            )
-
-        if response.status_code != 200:
-            raise LookupError(
-                f"No numbers available for {service}/{country}: "
-                f"{response.text}"
-            )
-
-        data = response.json()
-
-        try:
-            country_data = data[country]
-            product_data = country_data[service]
-
-            available_prices = [
-                float(operator_data["cost"])
-                for operator_data in product_data.values()
-                if int(operator_data.get("count", 0) or 0) > 0
-            ]
-
-            if not available_prices:
-                raise LookupError(
-                    f"No numbers available for {service}/{country}"
-                )
-
-            return min(available_prices)
-
-        except (KeyError, TypeError, ValueError):
-            raise LookupError(
-                f"No numbers available for {service}/{country}"
-            )
+        offers = await self.list_offers(service, country)
+        return min(o.cost_usd for o in offers)
 
     async def reserve_number(
         self,
         service: str,
         country: str,
+        operator: str = "any",
     ) -> ReservedNumber:
         """
-        Purchase an activation number from 5SIM.
+        Purchase an activation number from 5SIM. `operator` is one of the
+        pool ids returned by list_offers() (or "any" to let 5SIM pick).
         """
         service = service.strip().lower()
         country = country.strip().lower()
+        operator = (operator or "any").strip().lower()
 
         url = (
             f"{BASE_URL}/user/buy/activation/"
-            f"{country}/any/{service}"
+            f"{country}/{operator}/{service}"
         )
 
         async with httpx.AsyncClient(timeout=30.0) as client:

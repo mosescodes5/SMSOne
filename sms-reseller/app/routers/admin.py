@@ -7,7 +7,7 @@ from sqlmodel import Session, select, func
 from app.auth import CurrentUser, require_admin
 from app.database import get_session
 from app.models import LedgerEntry, Order, SiteSetting, Wallet
-from app.pricing import PRICING_KEYS, get_pricing_config
+from app.pricing import get_pricing_config, save_pricing_config
 from app.routers.settings import DEFAULTS
 from app.schemas import (
     AdminOrderRead,
@@ -55,15 +55,14 @@ def get_pricing(session: Session = Depends(get_session)):
 
 @router.put("/pricing", response_model=PricingSettingsRead)
 def update_pricing(payload: PricingSettingsRead, session: Session = Depends(get_session)):
-    for key in PRICING_KEYS:
-        value = str(getattr(payload, key))
-        row = session.get(SiteSetting, key)
-        if row is None:
-            row = SiteSetting(key=key, value=value)
-        else:
-            row.value = value
-        session.add(row)
-    session.commit()
+    if not payload.tiers:
+        raise HTTPException(status_code=400, detail="At least one pricing tier is required.")
+    save_pricing_config(
+        session,
+        usd_ngn_rate=payload.usd_ngn_rate,
+        min_price_ngn=payload.min_price_ngn,
+        tiers=[t.model_dump() for t in payload.tiers],
+    )
     return get_pricing(session)
 
 

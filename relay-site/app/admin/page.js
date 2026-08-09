@@ -180,10 +180,29 @@ function OverviewTab() {
 
 const PRICING_FIELDS = [
   { key: "usd_ngn_rate", label: "USD → NGN rate", step: "1", hint: "Update this whenever the naira moves — it's the single biggest lever on your margin." },
-  { key: "markup_percent", label: "Markup (%)", step: "1" },
-  { key: "markup_flat_ngn", label: "Flat fee (₦)", step: "1" },
-  { key: "min_price_ngn", label: "Minimum price (₦)", step: "1" },
+  { key: "min_price_ngn", label: "Minimum price (₦)", step: "1", hint: "A floor — nothing ever sells below this, whatever a tier computes." },
 ];
+
+function pickTierForCost(costNgn, tiers) {
+  const ordered = [...tiers].sort((a, b) => {
+    const aVal = a.max_cost_ngn == null ? Infinity : a.max_cost_ngn;
+    const bVal = b.max_cost_ngn == null ? Infinity : b.max_cost_ngn;
+    return aVal - bVal;
+  });
+  return ordered.find((t) => t.max_cost_ngn == null || costNgn <= t.max_cost_ngn) || ordered[ordered.length - 1];
+}
+
+function computePrice(costUsd, form) {
+  const costNgn = costUsd * (form.usd_ngn_rate || 0);
+  const tier = pickTierForCost(costNgn, form.tiers || []);
+  if (!tier) return { costNgn, price: 0, margin: 0, marginPct: 0 };
+  const withPercent = costNgn * (1 + (tier.markup_percent || 0) / 100);
+  const withFlat = withPercent + (tier.markup_flat_ngn || 0);
+  const price = Math.ceil(Math.max(withFlat, form.min_price_ngn || 0) / 10) * 10;
+  const margin = price - costNgn;
+  const marginPct = costNgn ? (margin / costNgn) * 100 : 0;
+  return { costNgn, price, margin, marginPct };
+}
 
 function PricingTab() {
   const [form, setForm] = useState(null);
@@ -195,6 +214,36 @@ function PricingTab() {
   useEffect(() => {
     api.getAdminPricing().then(setForm).catch((err) => setError(err.message));
   }, []);
+
+  function updateTier(index, key, value) {
+    const tiers = [...form.tiers];
+    tiers[index] = { ...tiers[index], [key]: value };
+    setForm({ ...form, tiers });
+  }
+
+  function addTier() {
+    // New tier slots in just below the current top (catch-all) tier — give it
+    // a real threshold and push the catch-all's numbers up, since a second
+    // catch-all tier would never be reachable.
+    const tiers = [...form.tiers];
+    const last = tiers[tiers.length - 1];
+    const insertAt = Math.max(0, tiers.length - 1);
+    const priorMax = tiers.length >= 2 ? tiers[tiers.length - 2].max_cost_ngn : 0;
+    const newThreshold = (priorMax || 0) + 1000;
+    tiers.splice(insertAt, 0, {
+      max_cost_ngn: newThreshold,
+      markup_percent: last?.markup_percent ?? 45,
+      markup_flat_ngn: last?.markup_flat_ngn ?? 500,
+    });
+    setForm({ ...form, tiers });
+  }
+
+  function removeTier(index) {
+    if (form.tiers.length <= 1) return; // always keep at least one tier
+    if (form.tiers[index].max_cost_ngn == null) return; // never remove the true catch-all
+    const tiers = form.tiers.filter((_, i) => i !== index);
+    setForm({ ...form, tiers });
+  }
 
   async function handleSave(e) {
     e.preventDefault();
@@ -215,21 +264,20 @@ function PricingTab() {
   if (error && !form) return <p className="text-red">{error}</p>;
   if (!form) return <p>Loading…</p>;
 
-  const costNgn = exampleCostUsd * (form.usd_ngn_rate || 0);
-  const withPercent = costNgn * (1 + (form.markup_percent || 0) / 100);
-  const withFlat = withPercent + (form.markup_flat_ngn || 0);
-  const finalPrice = Math.max(withFlat, form.min_price_ngn || 0);
-  const roundedPrice = Math.ceil(finalPrice / 10) * 10;
-  const marginNgn = roundedPrice - costNgn;
-  const marginPct = costNgn ? (marginNgn / costNgn) * 100 : 0;
+  const sortedTiers = [...form.tiers].sort((a, b) => {
+    const aVal = a.max_cost_ngn == null ? Infinity : a.max_cost_ngn;
+    const bVal = b.max_cost_ngn == null ? Infinity : b.max_cost_ngn;
+    return aVal - bVal;
+  });
+  const { costNgn, price, margin, marginPct } = computePrice(exampleCostUsd, form);
 
   return (
     <div className="grid md:grid-cols-2 gap-6 items-start">
-      <Card className="max-w-[480px]">
-        <p className="mb-5 text-ink-soft">
-          These apply immediately to every price shown and every number sold — no redeploy needed.
-        </p>
-        <form onSubmit={handleSave}>
+      <div>
+        <Card className="mb-6">
+          <p className="mb-5 text-ink-soft">
+            These apply immediately to every price shown and every number sold — no redeploy needed.
+          </p>
           {PRICING_FIELDS.map((f) => (
             <Field key={f.key} label={f.label}>
               <Input
@@ -242,19 +290,89 @@ function PricingTab() {
               {f.hint && <p className="text-[0.78rem] text-ink-faint mt-1">{f.hint}</p>}
             </Field>
           ))}
+        </Card>
+
+        <Card>
+          <h3 className="text-[1.1rem] mb-1.5">Price tiers</h3>
+          <p className="mb-4 text-ink-soft">
+            Bigger profit on expensive numbers, lighter markup on cheap ones. Each tier applies to your provider
+            cost (in ₦, before markup) up to its threshold — the last tier (no threshold) catches everything above
+            the others.
+          </p>
+
+          {sortedTiers.map((tier, i) => {
+            const realIndex = form.tiers.indexOf(tier);
+            const isLast = i === sortedTiers.length - 1;
+            return (
+              <div key={realIndex} className="border border-line rounded-xl p-3.5 mb-3">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="text-[0.82rem] font-semibold text-ink-soft">
+                    {isLast
+                      ? "Everything above other tiers"
+                      : `Cost up to ₦${Number(tier.max_cost_ngn || 0).toLocaleString("en-NG")}`}
+                  </div>
+                  {form.tiers.length > 1 && tier.max_cost_ngn != null && (
+                    <button
+                      type="button"
+                      onClick={() => removeTier(realIndex)}
+                      className="text-[0.75rem] text-red hover:underline"
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
+                <div className="grid grid-cols-3 gap-2.5">
+                  {!isLast && (
+                    <Field label="Cost up to (₦)">
+                      <Input
+                        type="number"
+                        step="10"
+                        value={tier.max_cost_ngn ?? ""}
+                        onChange={(e) => updateTier(realIndex, "max_cost_ngn", Number(e.target.value))}
+                        className="font-mono w-full"
+                      />
+                    </Field>
+                  )}
+                  <Field label="Markup (%)">
+                    <Input
+                      type="number"
+                      step="1"
+                      value={tier.markup_percent ?? ""}
+                      onChange={(e) => updateTier(realIndex, "markup_percent", Number(e.target.value))}
+                      className="font-mono w-full"
+                    />
+                  </Field>
+                  <Field label="Flat extra (₦)">
+                    <Input
+                      type="number"
+                      step="10"
+                      value={tier.markup_flat_ngn ?? ""}
+                      onChange={(e) => updateTier(realIndex, "markup_flat_ngn", Number(e.target.value))}
+                      className="font-mono w-full"
+                    />
+                  </Field>
+                </div>
+              </div>
+            );
+          })}
+
+          <Button type="button" variant="ghost" className="w-full mb-4" onClick={addTier}>
+            + Add tier
+          </Button>
+
           {error && (
             <div className="bg-red-soft text-red text-[0.85rem] px-3 py-2.5 rounded-lg mb-3.5">{error}</div>
           )}
           {saved && (
             <div className="bg-mint-soft text-mint text-[0.85rem] px-3 py-2.5 rounded-lg mb-3.5">Saved.</div>
           )}
-          <Button type="submit" variant="primary" disabled={saving}>
+          <Button variant="primary" className="w-full" onClick={handleSave} disabled={saving}>
             {saving ? "Saving…" : "Save pricing"}
           </Button>
-        </form>
-      </Card>
+        </Card>
+      </div>
 
-      <Card>
+      <Card className="md:sticky md:top-6">
         <h3 className="text-[1.1rem] mb-1.5">Live preview</h3>
         <p className="mb-4 text-ink-soft">See exactly what a given provider cost turns into with these settings.</p>
         <Field label="Example provider cost (USD)">
@@ -273,17 +391,17 @@ function PricingTab() {
           </div>
           <div>
             <div className="text-[0.72rem] text-ink-faint uppercase tracking-wide mb-1">Customer pays</div>
-            <div className="font-mono text-[1.2rem]">{formatNgn(roundedPrice)}</div>
+            <div className="font-mono text-[1.2rem]">{formatNgn(price)}</div>
           </div>
           <div>
             <div className="text-[0.72rem] text-ink-faint uppercase tracking-wide mb-1">Your profit</div>
-            <div className={`font-mono text-[1.2rem] ${marginNgn >= 0 ? "text-mint" : "text-red"}`}>
-              {formatNgn(marginNgn.toFixed(0))}
+            <div className={`font-mono text-[1.2rem] ${margin >= 0 ? "text-mint" : "text-red"}`}>
+              {formatNgn(margin.toFixed(0))}
             </div>
           </div>
           <div>
             <div className="text-[0.72rem] text-ink-faint uppercase tracking-wide mb-1">Margin</div>
-            <Pill tone={marginNgn >= 0 ? "mint" : "red"}>{marginPct.toFixed(0)}%</Pill>
+            <Pill tone={margin >= 0 ? "mint" : "red"}>{marginPct.toFixed(0)}%</Pill>
           </div>
         </div>
       </Card>

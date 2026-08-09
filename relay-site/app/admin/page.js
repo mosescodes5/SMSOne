@@ -63,6 +63,7 @@ export default function AdminPage() {
 
 const TABS = [
   { id: "overview", label: "Overview" },
+  { id: "pricing", label: "Pricing" },
   { id: "links", label: "Site Links" },
   { id: "users", label: "Users" },
   { id: "orders", label: "Orders" },
@@ -103,6 +104,7 @@ function AdminShell() {
           {TABS.find((t) => t.id === tab)?.label}
         </h2>
         {tab === "overview" && <OverviewTab />}
+        {tab === "pricing" && <PricingTab />}
         {tab === "links" && <LinksTab />}
         {tab === "users" && <UsersTab />}
         {tab === "orders" && <OrdersTab />}
@@ -124,6 +126,8 @@ function OverviewTab() {
   if (error) return <p className="text-red">{error}</p>;
   if (!stats) return <p>Loading…</p>;
 
+  const profitPositive = stats.total_profit_ngn >= 0;
+
   const cards = [
     { label: "Total users", value: stats.total_users.toLocaleString("en-NG") },
     { label: "Total orders", value: stats.total_orders.toLocaleString("en-NG") },
@@ -132,18 +136,157 @@ function OverviewTab() {
     { label: "Total wallet balances", value: formatNgn(stats.total_wallet_balance_ngn) },
     { label: "Revenue (order charges)", value: formatNgn(stats.total_revenue_ngn) },
     { label: "Total top-ups", value: formatNgn(stats.total_topups_ngn) },
+    { label: "Provider cost (received orders)", value: formatNgn(stats.total_provider_cost_ngn) },
   ];
 
   return (
-    <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-      {cards.map((c) => (
-        <Card key={c.label}>
-          <div className="text-[0.75rem] text-ink-faint font-semibold uppercase tracking-wide mb-1.5">
-            {c.label}
+    <div>
+      <Card className="mb-4">
+        <div className="text-[0.75rem] text-ink-faint font-semibold uppercase tracking-wide mb-1.5">
+          Profit (received orders, at today&apos;s USD/NGN rate)
+        </div>
+        <div
+          className={`font-mono text-[2rem] font-semibold mb-1 ${
+            profitPositive ? "text-mint" : "text-red"
+          }`}
+        >
+          {formatNgn(stats.total_profit_ngn)}
+        </div>
+        <Pill tone={profitPositive ? "mint" : "red"}>
+          {stats.profit_margin_pct}% margin
+        </Pill>
+        <p className="text-[0.8rem] text-ink-faint mt-3">
+          Revenue minus what received orders cost from your provider, converted at your current pricing rate. Older
+          orders bought at a different USD/NGN rate are approximated at today&apos;s rate, not their original one —
+          treat this as a running picture, not exact historical accounting.
+        </p>
+      </Card>
+
+      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {cards.map((c) => (
+          <Card key={c.label}>
+            <div className="text-[0.75rem] text-ink-faint font-semibold uppercase tracking-wide mb-1.5">
+              {c.label}
+            </div>
+            <div className="font-mono text-[1.5rem] font-semibold">{c.value}</div>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ---------- Pricing ----------
+
+const PRICING_FIELDS = [
+  { key: "usd_ngn_rate", label: "USD → NGN rate", step: "1", hint: "Update this whenever the naira moves — it's the single biggest lever on your margin." },
+  { key: "markup_percent", label: "Markup (%)", step: "1" },
+  { key: "markup_flat_ngn", label: "Flat fee (₦)", step: "1" },
+  { key: "min_price_ngn", label: "Minimum price (₦)", step: "1" },
+];
+
+function PricingTab() {
+  const [form, setForm] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+  const [saved, setSaved] = useState(false);
+  const [exampleCostUsd, setExampleCostUsd] = useState(0.3);
+
+  useEffect(() => {
+    api.getAdminPricing().then(setForm).catch((err) => setError(err.message));
+  }, []);
+
+  async function handleSave(e) {
+    e.preventDefault();
+    setSaving(true);
+    setError(null);
+    setSaved(false);
+    try {
+      const updated = await api.updateAdminPricing(form);
+      setForm(updated);
+      setSaved(true);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (error && !form) return <p className="text-red">{error}</p>;
+  if (!form) return <p>Loading…</p>;
+
+  const costNgn = exampleCostUsd * (form.usd_ngn_rate || 0);
+  const withPercent = costNgn * (1 + (form.markup_percent || 0) / 100);
+  const withFlat = withPercent + (form.markup_flat_ngn || 0);
+  const finalPrice = Math.max(withFlat, form.min_price_ngn || 0);
+  const roundedPrice = Math.ceil(finalPrice / 10) * 10;
+  const marginNgn = roundedPrice - costNgn;
+  const marginPct = costNgn ? (marginNgn / costNgn) * 100 : 0;
+
+  return (
+    <div className="grid md:grid-cols-2 gap-6 items-start">
+      <Card className="max-w-[480px]">
+        <p className="mb-5 text-ink-soft">
+          These apply immediately to every price shown and every number sold — no redeploy needed.
+        </p>
+        <form onSubmit={handleSave}>
+          {PRICING_FIELDS.map((f) => (
+            <Field key={f.key} label={f.label}>
+              <Input
+                type="number"
+                step={f.step}
+                value={form[f.key] ?? ""}
+                onChange={(e) => setForm({ ...form, [f.key]: Number(e.target.value) })}
+                className="font-mono w-full"
+              />
+              {f.hint && <p className="text-[0.78rem] text-ink-faint mt-1">{f.hint}</p>}
+            </Field>
+          ))}
+          {error && (
+            <div className="bg-red-soft text-red text-[0.85rem] px-3 py-2.5 rounded-lg mb-3.5">{error}</div>
+          )}
+          {saved && (
+            <div className="bg-mint-soft text-mint text-[0.85rem] px-3 py-2.5 rounded-lg mb-3.5">Saved.</div>
+          )}
+          <Button type="submit" variant="primary" disabled={saving}>
+            {saving ? "Saving…" : "Save pricing"}
+          </Button>
+        </form>
+      </Card>
+
+      <Card>
+        <h3 className="text-[1.1rem] mb-1.5">Live preview</h3>
+        <p className="mb-4 text-ink-soft">See exactly what a given provider cost turns into with these settings.</p>
+        <Field label="Example provider cost (USD)">
+          <Input
+            type="number"
+            step="0.01"
+            value={exampleCostUsd}
+            onChange={(e) => setExampleCostUsd(Number(e.target.value))}
+            className="font-mono w-full"
+          />
+        </Field>
+        <div className="grid grid-cols-2 gap-3 mt-4">
+          <div>
+            <div className="text-[0.72rem] text-ink-faint uppercase tracking-wide mb-1">Your cost</div>
+            <div className="font-mono text-[1.2rem]">{formatNgn(costNgn.toFixed(0))}</div>
           </div>
-          <div className="font-mono text-[1.5rem] font-semibold">{c.value}</div>
-        </Card>
-      ))}
+          <div>
+            <div className="text-[0.72rem] text-ink-faint uppercase tracking-wide mb-1">Customer pays</div>
+            <div className="font-mono text-[1.2rem]">{formatNgn(roundedPrice)}</div>
+          </div>
+          <div>
+            <div className="text-[0.72rem] text-ink-faint uppercase tracking-wide mb-1">Your profit</div>
+            <div className={`font-mono text-[1.2rem] ${marginNgn >= 0 ? "text-mint" : "text-red"}`}>
+              {formatNgn(marginNgn.toFixed(0))}
+            </div>
+          </div>
+          <div>
+            <div className="text-[0.72rem] text-ink-faint uppercase tracking-wide mb-1">Margin</div>
+            <Pill tone={marginNgn >= 0 ? "mint" : "red"}>{marginPct.toFixed(0)}%</Pill>
+          </div>
+        </div>
+      </Card>
     </div>
   );
 }

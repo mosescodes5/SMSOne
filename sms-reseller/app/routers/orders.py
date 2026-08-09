@@ -43,6 +43,7 @@ async def preview_price(
     request: Request,
     service: str,
     country: str,
+    session: Session = Depends(get_session),
 ):
     """
     Get the current cheapest available 5SIM price
@@ -88,7 +89,7 @@ async def preview_price(
         "service": service,
         "country": country,
         "cost_usd": cost_usd,
-        "price_ngn": price_for_customer(cost_usd),
+        "price_ngn": price_for_customer(cost_usd, session),
     }
 
 
@@ -141,7 +142,7 @@ async def buy_number(
         )
 
     price_ngn = price_for_customer(
-        reserved.cost_usd
+        reserved.cost_usd, session
     )
 
     wallet = session.get(

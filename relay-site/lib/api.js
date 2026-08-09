@@ -316,6 +316,20 @@ export const updateAdminSettings = (
     }
   );
 
+export const getAdminPricing = () =>
+  api("/admin/pricing");
+
+export const updateAdminPricing = (
+  pricing
+) =>
+  apiWithBody(
+    "/admin/pricing",
+    {
+      method: "PUT",
+      body: pricing,
+    }
+  );
+
 export const listAdminUsers = (q = "") =>
   api(
     `/admin/users${

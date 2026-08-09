@@ -7,12 +7,14 @@ from sqlmodel import Session, select, func
 from app.auth import CurrentUser, require_admin
 from app.database import get_session
 from app.models import LedgerEntry, Order, SiteSetting, Wallet
+from app.pricing import PRICING_KEYS, get_pricing_config
 from app.routers.settings import DEFAULTS
 from app.schemas import (
     AdminOrderRead,
     AdminStatsRead,
     AdminUserRead,
     OrderRead,
+    PricingSettingsRead,
     SiteSettingsRead,
     WalletAdjustRequest,
 )
@@ -41,6 +43,28 @@ def update_settings(payload: SiteSettingsRead, session: Session = Depends(get_se
         session.add(row)
     session.commit()
     return get_settings(session)
+
+
+# ---------- Pricing (markup knobs) ----------
+
+
+@router.get("/pricing", response_model=PricingSettingsRead)
+def get_pricing(session: Session = Depends(get_session)):
+    return PricingSettingsRead(**get_pricing_config(session))
+
+
+@router.put("/pricing", response_model=PricingSettingsRead)
+def update_pricing(payload: PricingSettingsRead, session: Session = Depends(get_session)):
+    for key in PRICING_KEYS:
+        value = str(getattr(payload, key))
+        row = session.get(SiteSetting, key)
+        if row is None:
+            row = SiteSetting(key=key, value=value)
+        else:
+            row.value = value
+        session.add(row)
+    session.commit()
+    return get_pricing(session)
 
 
 # ---------- Users ----------
@@ -177,12 +201,31 @@ def get_stats(session: Session = Depends(get_session)):
         )
     ).one()
 
+    # Provider cost is only known in USD per order (Order.cost_usd) — convert
+    # using the *current* usd_ngn_rate. This is an approximation for older
+    # orders bought when the rate was different; good enough for a running
+    # profit picture, not exact historical accounting. Only counts "received"
+    # orders — pending/cancelled/expired orders were refunded, so they're a
+    # wash (you paid nothing net, or the provider itself refunded you).
+    cost_usd_total = session.exec(
+        select(func.coalesce(func.sum(Order.cost_usd), 0.0)).where(Order.status == "received")
+    ).one()
+    current_rate = get_pricing_config(session)["usd_ngn_rate"]
+    total_provider_cost_ngn = cost_usd_total * current_rate
+
+    total_revenue_ngn = abs(revenue)  # order_charge entries are stored negative
+    total_profit_ngn = total_revenue_ngn - total_provider_cost_ngn
+    profit_margin_pct = (total_profit_ngn / total_revenue_ngn * 100) if total_revenue_ngn else 0.0
+
     return AdminStatsRead(
         total_users=total_users,
         total_orders=total_orders,
         orders_pending=orders_pending,
         orders_received=orders_received,
         total_wallet_balance_ngn=total_wallet_balance,
-        total_revenue_ngn=abs(revenue),  # order_charge entries are stored negative
+        total_revenue_ngn=total_revenue_ngn,
         total_topups_ngn=topups,
+        total_provider_cost_ngn=round(total_provider_cost_ngn, 2),
+        total_profit_ngn=round(total_profit_ngn, 2),
+        profit_margin_pct=round(profit_margin_pct, 1),
     )

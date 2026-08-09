@@ -68,6 +68,13 @@ class SiteSettingsRead(SQLModel):
     announcement: str = ""
 
 
+class PricingSettingsRead(SQLModel):
+    usd_ngn_rate: float
+    markup_percent: float
+    markup_flat_ngn: float
+    min_price_ngn: float
+
+
 class AdminStatsRead(SQLModel):
     total_users: int
     total_orders: int
@@ -76,3 +83,6 @@ class AdminStatsRead(SQLModel):
     total_wallet_balance_ngn: float
     total_revenue_ngn: float  # sum of order_charge ledger entries (negative -> flipped positive)
     total_topups_ngn: float
+    total_provider_cost_ngn: float  # what received orders cost us, at current USD/NGN rate
+    total_profit_ngn: float  # total_revenue_ngn - total_provider_cost_ngn (received orders only)
+    profit_margin_pct: float

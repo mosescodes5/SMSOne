@@ -2,10 +2,14 @@
 Adapter for SMS-Man's REST API (https://sms-man.com/site/api).
 Often runs cheaper than 5SIM for high-volume routes (WhatsApp/Telegram/Google
 on Nigeria and other African countries especially), so it's wired in as a
-second, swappable option — just set PROVIDER=smsman and PROVIDER_API_KEY in
-.env to switch. Same disclaimer as the 5sim adapter: this is a skeleton
-matching their published docs, verify against the live reference before
-production since providers change schemas without notice.
+second, swappable option — set PROVIDER=smsman to use it as your primary
+provider, or list it in PROVIDER_FALLBACK to use it as a fallback when the
+primary is out of stock. Either way, set SMSMAN_API_KEY in .env — this
+adapter never reads PROVIDER_API_KEY, since that's scoped to whichever
+provider is primary and 5SIM/SMS-Man keys aren't interchangeable. Same
+disclaimer as the 5sim adapter: this is a skeleton matching their published
+docs, verify against the live reference before production since providers
+change schemas without notice.
 
 Auth: API key from your SMS-Man account (Profile -> API).
 """
@@ -24,7 +28,7 @@ class SmsManProvider(SMSProvider):
     name = "smsman"
 
     def __init__(self) -> None:
-        self._params = {"token": settings.provider_api_key}
+        self._params = {"token": settings.smsman_api_key}
 
     async def get_price_usd(self, service: str, country: str) -> float:
         url = f"{BASE_URL}/limits"

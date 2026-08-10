@@ -6,6 +6,7 @@ from sqlmodel import Session, select
 from app.auth import CurrentUser, get_current_user
 from app.config import settings
 from app.database import get_session
+from app.email import send_email_safe, topup_receipt_email
 from app.models import LedgerEntry, PaymentStatus, PendingPayment, Wallet
 from app.payments.korapay import (
     KorapayError,
@@ -119,6 +120,12 @@ async def korapay_webhook(request: Request, session: Session = Depends(get_sessi
         )
     )
     session.commit()
+
+    if wallet.email:
+        await send_email_safe(
+            wallet.email,
+            *topup_receipt_email(payment.amount_ngn, wallet.wallet_balance_ngn),
+        )
 
     return {"status": "credited"}
 

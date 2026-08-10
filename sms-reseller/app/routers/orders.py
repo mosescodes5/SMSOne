@@ -6,9 +6,10 @@ from sqlmodel import Session, select
 from app.auth import CurrentUser, get_current_user
 from app.config import settings
 from app.database import get_session
+from app.email import order_receipt_email, send_email_safe
 from app.models import LedgerEntry, Order, OrderStatus, Wallet
 from app.pricing import price_for_customer
-from app.providers import get_provider
+from app.providers import get_fallback_chain, get_provider_by_name
 from app.rate_limit import limiter
 from app.schemas import OrderRead
 
@@ -65,24 +66,31 @@ async def preview_price(
             detail="Country is required",
         )
 
-    provider = get_provider()
+    last_error = None
+    cost_usd = None
+    for provider in get_fallback_chain():
+        try:
+            cost_usd = await provider.get_price_usd(
+                service,
+                country,
+            )
+            break
+        except LookupError as exc:
+            last_error = exc
+            continue
+        except Exception as exc:
+            last_error = exc
+            continue
 
-    try:
-        cost_usd = await provider.get_price_usd(
-            service,
-            country,
-        )
-
-    except LookupError as exc:
-        raise HTTPException(
-            status_code=404,
-            detail=str(exc),
-        )
-
-    except Exception as exc:
+    if cost_usd is None:
+        if isinstance(last_error, LookupError):
+            raise HTTPException(
+                status_code=404,
+                detail=str(last_error),
+            )
         raise HTTPException(
             status_code=502,
-            detail=f"Provider error: {str(exc)}",
+            detail=f"Provider error: {str(last_error)}",
         )
 
     return {
@@ -122,25 +130,42 @@ async def buy_number(
             detail="Country is required",
         )
 
-    provider = get_provider()
+    normalized_operator = (operator or "any").strip().lower()
 
-    try:
-        reserved = await provider.reserve_number(
-            service,
-            country,
-            operator=(operator or "any").strip().lower(),
-        )
+    provider = None
+    reserved = None
+    last_error = None
 
-    except LookupError as exc:
-        raise HTTPException(
-            status_code=400,
-            detail=str(exc),
-        )
+    for candidate in get_fallback_chain():
+        # The chosen operator id only means something to the provider whose
+        # offer list it came from (5SIM operator ids, say) — any other
+        # provider in the chain just ignores it and picks automatically,
+        # which is exactly what "any" means, so this is safe to pass through
+        # unconditionally rather than needing per-provider operator values.
+        try:
+            reserved = await candidate.reserve_number(
+                service,
+                country,
+                operator=normalized_operator,
+            )
+            provider = candidate
+            break
+        except LookupError as exc:
+            last_error = exc
+            continue
+        except Exception as exc:
+            last_error = exc
+            continue
 
-    except Exception as exc:
+    if reserved is None:
+        if isinstance(last_error, LookupError):
+            raise HTTPException(
+                status_code=400,
+                detail=str(last_error),
+            )
         raise HTTPException(
             status_code=502,
-            detail=f"Provider error: {str(exc)}",
+            detail=f"Provider error: {str(last_error)}",
         )
 
     price_ngn = price_for_customer(
@@ -251,7 +276,7 @@ async def check_order(
     if order.status != OrderStatus.pending:
         return order
 
-    provider = get_provider()
+    provider = get_provider_by_name(order.provider_name)
 
     if (
         datetime.now(timezone.utc)
@@ -297,6 +322,14 @@ async def check_order(
         session.commit()
         session.refresh(order)
 
+        # Best-effort receipt — send_email_safe already swallows/logs errors,
+        # so a Brevo hiccup can never fail the order, which has already
+        # succeeded and been paid for by this point.
+        subject, html = order_receipt_email(
+            order.service, order.country, order.phone_number, order.sms_code, order.price_ngn
+        )
+        await send_email_safe(user.email, subject, html)
+
     return order
 
 
@@ -328,7 +361,7 @@ async def cancel_order(
             detail=f"Order already {order.status}",
         )
 
-    provider = get_provider()
+    provider = get_provider_by_name(order.provider_name)
 
     try:
         await provider.cancel_order(

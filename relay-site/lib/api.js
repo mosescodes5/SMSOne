@@ -15,6 +15,14 @@ export async function register(email, password) {
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
+    options: {
+      // Without this, Supabase falls back to the dashboard's single "Site
+      // URL" setting for every environment — which breaks Vercel preview
+      // deployments (each gets its own throwaway domain) and silently
+      // defaults to localhost if that setting's never been changed.
+      // window.location.origin makes it correct wherever this actually runs.
+      emailRedirectTo: `${window.location.origin}/dashboard`,
+    },
   });
 
   if (error) throw new Error(error.message);
@@ -42,6 +50,9 @@ export async function resendConfirmation(email) {
   const { error } = await supabase.auth.resend({
     type: "signup",
     email,
+    options: {
+      emailRedirectTo: `${window.location.origin}/dashboard`,
+    },
   });
 
   if (error) throw new Error(error.message);

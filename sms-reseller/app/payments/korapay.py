@@ -48,10 +48,16 @@ async def initialize_charge(
     the reference directly — see Korapay's inline JS docs).
     """
     payload = {
-        "amount": amount_ngn,
+        # Korapay's docs specify `amount` as an Integer. Sending a Python
+        # float (e.g. 2000.0) serializes to JSON as "2000.0" — a different
+        # wire type than "2000" — which their validator rejects outright as
+        # "One or more fields are invalid", even though the value itself is
+        # a whole number. round() first so a stray 2000.4x from the frontend
+        # doesn't silently get truncated down instead of rounded.
+        "amount": int(round(amount_ngn)),
         "currency": "NGN",
         "reference": reference,
-        "customer": {"email": customer_email},
+        "customer": {"email": customer_email, "name": customer_email.split("@")[0]},
         "redirect_url": redirect_url,
         "narration": "Wallet top-up",
     }

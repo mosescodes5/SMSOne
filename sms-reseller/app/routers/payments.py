@@ -39,7 +39,14 @@ async def initialize_topup(
             detail=f"Amount must be between {MIN_TOPUP_NGN} and {MAX_TOPUP_NGN} NGN",
         )
 
-    reference = f"topup_{user.id}_{uuid.uuid4().hex[:12]}"
+    # Korapay caps `reference` at 50 characters. The full UUID (36 chars
+    # with hyphens) plus a "topup_" prefix and random suffix blew past that
+    # — .hex strips the hyphens (32→ chars) and we only need a fragment of
+    # it for human-readability in Korapay's dashboard anyway, since the DB
+    # row (not the reference string) is what actually links this back to
+    # the user. 16 hex chars of randomness (64 bits) is still effectively
+    # collision-proof for a unique-reference requirement.
+    reference = f"tp_{user.id.hex[:8]}_{uuid.uuid4().hex[:16]}"
 
     payment = PendingPayment(reference=reference, user_id=user.id, amount_ngn=amount_ngn)
     session.add(payment)

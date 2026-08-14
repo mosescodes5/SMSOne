@@ -63,6 +63,11 @@ body {
   color: var(--ink);
   font-family: var(--font-body);
   -webkit-font-smoothing: antialiased;
+  /* Safety net against any element that bleeds past the viewport edge
+     (decorative blurs, wide tables, etc.) causing a page-level horizontal
+     scrollbar on mobile — the actual content should never need this, but
+     it's cheap insurance. */
+  overflow-x: hidden;
 }
 
 h1, h2, h3, h4 {

@@ -25,7 +25,7 @@ export function Button({
 export function Card({ className = "", glass = false, children, ...props }) {
   return (
     <div
-      className={`${glass ? "glass" : "bg-surface border border-line"} rounded-2xl p-6 ${className}`}
+      className={`${glass ? "glass" : "bg-surface border border-line"} rounded-2xl p-4 sm:p-6 ${className}`}
       {...props}
     >
       {children}

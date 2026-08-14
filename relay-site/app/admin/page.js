@@ -73,8 +73,8 @@ function AdminShell() {
   const [tab, setTab] = useState("overview");
 
   return (
-    <div className="grid md:grid-cols-[220px_1fr] min-h-screen">
-      <aside className="border-r border-line p-6 flex md:flex-col justify-between md:justify-start gap-6 items-center md:items-stretch">
+    <div className="md:grid md:grid-cols-[220px_1fr] min-h-screen">
+      <aside className="border-r border-line p-6 hidden md:flex md:flex-col gap-6 items-stretch">
         <div>
           <div className="flex items-center gap-2 font-display font-bold text-[1.1rem] mb-1">
             <span className="w-2.5 h-2.5 rounded-full bg-signal" />
@@ -84,7 +84,7 @@ function AdminShell() {
             ← Back to dashboard
           </Link>
         </div>
-        <nav className="hidden md:flex flex-col gap-1 flex-1">
+        <nav className="flex flex-col gap-1 flex-1">
           {TABS.map((t) => (
             <button
               key={t.id}
@@ -99,8 +99,34 @@ function AdminShell() {
         </nav>
       </aside>
 
-      <main className="p-6 md:p-10">
-        <h2 className="text-[1.3rem] font-display font-semibold mb-5">
+      {/* Mobile header + horizontally-scrollable tab bar — the sidebar
+          above is desktop-only, so this is the only way to switch tabs
+          below the md breakpoint. */}
+      <div className="md:hidden border-b border-line p-4">
+        <div className="flex items-center gap-2 font-display font-bold text-[1.05rem] mb-2.5">
+          <span className="w-2.5 h-2.5 rounded-full bg-signal" />
+          Admin
+          <Link href="/dashboard" className="ml-auto text-[0.78rem] font-normal text-ink-faint hover:text-ink-soft">
+            ← Dashboard
+          </Link>
+        </div>
+        <nav className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+          {TABS.map((t) => (
+            <button
+              key={t.id}
+              onClick={() => setTab(t.id)}
+              className={`shrink-0 px-3.5 py-2 rounded-full text-[0.85rem] font-semibold whitespace-nowrap transition-colors ${
+                tab === t.id ? "gradient-signal text-white" : "border border-line text-ink-soft"
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </nav>
+      </div>
+
+      <main className="p-4 sm:p-6 md:p-10">
+        <h2 className="text-[1.15rem] md:text-[1.3rem] font-display font-semibold mb-5 hidden md:block">
           {TABS.find((t) => t.id === tab)?.label}
         </h2>
         {tab === "overview" && <OverviewTab />}
@@ -321,7 +347,7 @@ function PricingTab() {
                     </button>
                   )}
                 </div>
-                <div className="grid grid-cols-3 gap-2.5">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                   {!isLast && (
                     <Field label="Cost up to (₦)">
                       <Input

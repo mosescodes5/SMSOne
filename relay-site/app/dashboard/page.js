@@ -1376,6 +1376,7 @@ function LedgerView() {
       {!error &&
         rows &&
         rows.length > 0 && (
+          <div className="overflow-x-auto">
           <table className="w-full border-collapse text-[0.88rem]">
             <thead>
               <tr>
@@ -1436,6 +1437,7 @@ function LedgerView() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
     </Card>
   );

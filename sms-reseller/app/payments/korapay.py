@@ -75,7 +75,15 @@ async def initialize_charge(
         raise KorapayError(f"Korapay returned a non-JSON response (status {resp.status_code})")
 
     if not data.get("status"):
-        raise KorapayError(data.get("message", "Korapay charge initialization failed"))
+        # Korapay's own docs: on invalid-data errors, the *specific* field
+        # problem lives in the nested `data` object, not the top-level
+        # `message` (which is just a generic "one or more fields are
+        # invalid" wrapper). Surface both, or we're debugging blind.
+        detail = data.get("message", "Korapay charge initialization failed")
+        field_errors = data.get("data")
+        if field_errors:
+            detail = f"{detail} — details: {field_errors}"
+        raise KorapayError(detail)
     return data["data"]
 
 

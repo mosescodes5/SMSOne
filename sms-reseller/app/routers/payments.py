@@ -1,3 +1,4 @@
+import logging
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -15,6 +16,8 @@ from app.payments.korapay import (
     verify_webhook_signature,
 )
 from app.rate_limit import limiter
+
+logger = logging.getLogger("relay.payments")
 
 router = APIRouter(prefix="/payments/korapay", tags=["payments"])
 
@@ -53,6 +56,13 @@ async def initialize_topup(
         payment.status = PaymentStatus.failed
         session.add(payment)
         session.commit()
+        # Full detail (including Korapay's field-level errors) goes to your
+        # server logs even if the frontend only shows a shortened version —
+        # check `uvicorn`/your host's logs for the exact rejected field.
+        logger.warning(
+            "Korapay initialize failed for user=%s amount=%s reference=%s: %s",
+            user.id, amount_ngn, reference, e,
+        )
         raise HTTPException(status_code=502, detail=f"Payment provider error: {e}")
 
     # charge typically includes {"checkout_url": ..., "reference": ...}
